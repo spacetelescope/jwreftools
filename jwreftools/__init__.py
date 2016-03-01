@@ -12,7 +12,7 @@ from ._astropy_init import *
 
 # For egg_info test builds to pass, put package imports here.
 if not _ASTROPY_SETUP_:
+    from . import niriss
     from . import nirspec
     from . import nircam 
-    from . import niriss
     from . import miri
