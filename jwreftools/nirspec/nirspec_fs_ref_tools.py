@@ -318,7 +318,7 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
     Create a NIRSPEC disperser reference file in ASDF format.
 
     Combine information stored in disperser_G?.dis and disperser_G?_TiltY.gtp
-    files delievred by the IDT.
+    files delivered by the IDT.
 
     disperser2asdf("disperser_G140H.dis", "disperser_G140H_TiltY.gtp", "disperserG140H.asdf")
 
@@ -374,7 +374,6 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
             n = int(l[0].split()[1])
             coeffs = {}
             idt_coef = [float(c) for c in l[1:1+n]]
-            #for i , c in enumerate([float(c) for c in l[1:1+n]]):
             for i, c in enumerate(idt_coef[::-1]):
                 coeffs['c' + str(i)] = c
             tiltyd['tilt_model'] = models.Polynomial1D(n-1, **coeffs)
