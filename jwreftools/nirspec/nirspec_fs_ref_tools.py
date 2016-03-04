@@ -336,8 +336,6 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
     fasdf : asdf.AsdfFile
 
     """
-
-    #t = {}
     disperser = disfile.split('.dis')[0].split('_')[1]
     with open(disfile) as f:
         lines=[l.strip() for l in f.readlines()]
@@ -375,7 +373,9 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
             l = line.split('\n')
             n = int(l[0].split()[1])
             coeffs = {}
-            for i , c in enumerate([float(c) for c in l[1:1+n]]):
+            idt_coef = [float(c) for c in l[1:1+n]]
+            #for i , c in enumerate([float(c) for c in l[1:1+n]]):
+            for i, c in enumerate(idt_coef[::-1]):
                 coeffs['c' + str(i)] = c
             tiltyd['tilt_model'] = models.Polynomial1D(n-1, **coeffs)
         elif line.startswith("Temperatures"):
