@@ -149,28 +149,10 @@ def pcf2asdf(pcffile, outname, ref_file_kw):
     >>> pcf2asdf("Camera.pcf", "camera.asdf")
 
     """
+    linear_det2sky = linear_from_pcf_det2sky(pcffile)
+
     with open(pcffile) as f:
         lines = [l.strip() for l in f.readlines()]
-
-    factors = lines[lines.index('*Factor 2') + 1].split()
-    scale = models.Scale(1 / float(factors[0]), name="x_scale") & \
-          models.Scale(1 / float(factors[1]), name="y_scale")
-
-    rotation_angle = lines[lines.index('*Rotation') + 1]
-    # Backward rotation is in the counter-clockwise direction as in modeling
-    # Forward is clockwise
-    backward_rotation = models.Rotation2D(float(rotation_angle), name='rotation')
-    rotation = backward_rotation.copy()
-
-    # Here the model is called "output_shift" but in the team version it is the "input_shift".
-    input_rot_center = lines[lines.index('*InputRotationCentre 2') + 1].split()
-    output_offset = models.Shift(float(input_rot_center[0]), name='output_x_shift') & \
-                 models.Shift(float(input_rot_center[1]), name='output_y_shift')
-
-    # Here the model is called "input_shift" but in the team version it is the "output_shift".
-    output_rot_center = lines[lines.index('*OutputRotationCentre 2') + 1].split()
-    input_offset = models.Shift(-float(output_rot_center[0]), name='input_x_shift') & \
-                  models.Shift(-float(output_rot_center[1]), name='input_y_shift')
 
     degree = int(lines[lines.index('*FitOrder') + 1])
 
@@ -201,7 +183,7 @@ def pcf2asdf(pcffile, outname, ref_file_kw):
 
     model_poly = input2poly_mapping | (x_poly_forward & y_poly_forward) | output2poly_mapping
 
-    model = model_poly | input_offset |scale |rotation |output_offset
+    model = model_poly | linear_det2sky
 
     f = AsdfFile()
     f.tree = ref_file_kw.copy()
@@ -209,30 +191,104 @@ def pcf2asdf(pcffile, outname, ref_file_kw):
     f.write_to(outname)
 
 
+def homothetic_sky2det(input_center, angle, scale, output_center):
+    """
+    Create the homothetic transform from a .pcf file.
+
+    The forward direction is sky to detector.
+    Parameters
+    ----------
+    input_center : ndarray of shape (1,2) or iterable
+        (x, y) coordinate of the input rotation center
+    angle : float
+        Rotation angle in degrees
+    scale : ndarray of shape (1,2) or iterable
+        Scaling factors in x, y directions
+    output_center : ndarray of shape (1,2) or iterable
+        (x, y) coordinate of the output rotation center
+
+    """
+
+    input_center = np.array(input_center, dtype=np.float)
+    output_center = np.array(output_center, dtype=np.float)
+    scale = np.array(scale, dtype=np.float)
+    angle = np.deg2rad(angle)
+
+    rotmat_sky2det = [[np.cos(angle), np.sin(angle)],
+                      [-np.sin(angle), np.cos(angle)]]
+    scaling = np.array([[scale[0] , 0], [0, scale[1]]])
+    mat_sky2det = np.dot(scaling, rotmat_sky2det)
+
+    aff = models.AffineTransformation2D(matrix=mat_sky2det)
+
+
+    transform = models.Shift(-input_center[0]) & models.Shift(-input_center[1]) | aff | \
+              models.Shift(output_center[0]) & models.Shift(output_center[1])
+    return transform
+
+
+def homothetic_det2sky(input_center, angle, scale, output_center):
+    """
+    Create the homothetic transform from a .pcf file.
+
+    The forward direction is sky to detector.
+    Parameters
+    ----------
+    input_center : ndarray of shape (1,2) or iterable
+        (x, y) coordinate of the input rotation center
+    angle : float
+        Rotation angle in degrees
+    scale : ndarray of shape (1,2) or iterable
+        Scaling factors in x, y directions
+    output_center : ndarray of shape (1,2) or iterable
+        (x, y) coordinate of the output rotation center
+
+    """
+
+    input_center = np.array(input_center, dtype=np.float)
+    output_center = np.array(output_center, dtype=np.float)
+    scale = np.array(scale, dtype=np.float)
+    angle = np.deg2rad(angle)
+
+    rotmat_sky2det = [[np.cos(angle), -np.sin(angle)],
+                      [np.sin(angle), np.cos(angle)]]
+    scaling = np.array([[1/scale[0] , 0], [0, 1/scale[1]]])
+    mat_sky2det = np.dot(rotmat_sky2det, scaling)
+
+    aff = models.AffineTransformation2D(matrix=mat_sky2det)
+
+
+    transform = models.Shift(-output_center[0]) & models.Shift(-output_center[1]) | \
+              aff | models.Shift(input_center[0]) & models.Shift(input_center[1])
+    return transform
+
+
+def linear_from_pcf_det2sky(pcffile):
+    with open(pcffile) as f:
+        lines = [l.strip() for l in f.readlines()]
+    factors = lines[lines.index('*Factor 2') + 1].split()
+    rotation_angle = float(lines[lines.index('*Rotation') + 1])
+    input_rot_center = lines[lines.index('*InputRotationCentre 2') + 1].split()
+    output_rot_center = lines[lines.index('*OutputRotationCentre 2') + 1].split()
+
+    det2sky = homothetic_det2sky(input_rot_center, rotation_angle, factors, output_rot_center)
+    return det2sky
+
+
 def fore2asdf(pcffore, outname, ref_kw):
     """
     forward direction : msa 2 ote
     backward_direction: msa 2 fpa
+
     """
     with open(pcffore) as f:
         lines = [l.strip() for l in f.readlines()]
 
-    factors = lines[lines.index('*Factor 2') + 1].split()
-    # factor==1/factor in backward msa2ote direction and == factor in ote2msa direction
-    scale = models.Scale(1. / float(factors[0]), name='scale_x') & \
-          models.Scale(1 / float(factors[1]), name='scale_y')
+    fore_det2sky = linear_from_pcf_det2sky(pcffore)
+    fore_linear = fore_det2sky
+    fore_linear.inverse = fore_det2sky.inverse & Identity(1)
 
-    rotation_angle = lines[lines.index('*Rotation') + 1]
-    rotation = models.Rotation2D(float(rotation_angle), name='rotation')
-
-    input_rot_center = lines[lines.index('*InputRotationCentre 2') + 1].split()
-    output_offset = models.Shift(float(input_rot_center[0]), name="output_x_shift") & \
-                 models.Shift(float(input_rot_center[1]), name="output_y_shift")
-
-    output_rot_center = lines[lines.index('*OutputRotationCentre 2') + 1].split()
-    input_offset = models.Shift(-float(output_rot_center[0]), name="input_x_shift") & \
-                  models.Shift(-float(output_rot_center[1]), name="input_y_shift")
-
+    # compute the polynomial
     degree = int(lines[lines.index('*FitOrder') + 1])
 
     xcoeff_index = lines.index('*xForwardCoefficients 21 2')
@@ -247,7 +303,8 @@ def fore2asdf(pcffore, outname, ref_kw):
     # do chromatic correction
     # the input is Xote, Yote, lam
     model_x_backward = (Mapping((0, 1), n_inputs=3) | x_poly_backward) + \
-                     ((Mapping((0,1), n_inputs=3) | x_poly_backward_distortion) * Mapping((2,)))
+                     ((Mapping((0,1), n_inputs=3) | x_poly_backward_distortion) * \
+                     (Mapping((2,)) | Identity(1)))
 
     ycoeff_index = lines.index('*yForwardCoefficients 21 2')
     ycoeff_forward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
@@ -261,7 +318,8 @@ def fore2asdf(pcffore, outname, ref_kw):
     # do chromatic correction
     # the input is Xote, Yote, lam
     model_y_backward = (Mapping((0,1), n_inputs=3) | y_poly_backward) + \
-                     ((Mapping((0, 1), n_inputs=3) | y_poly_backward_distortion) * Mapping((2,)))
+                     ((Mapping((0, 1), n_inputs=3) | y_poly_backward_distortion) * \
+                     (Mapping((2,)) | Identity(1) ))
 
     xcoeff_index = lines.index('*xBackwardCoefficients 21 2')
     xcoeff_backward = coeffs_from_pcf(degree, lines[xcoeff_index + 1: xcoeff_index + 22])
@@ -273,7 +331,8 @@ def fore2asdf(pcffore, outname, ref_kw):
     # the chromatic correction is done here
     # the input is Xmsa, Ymsa, lam
     model_x_forward = (Mapping((0,1), n_inputs=3) | x_poly_forward) + \
-                    ((Mapping((0,1), n_inputs=3) | x_poly_forward_distortion) * Mapping((2,)))
+                    ((Mapping((0,1), n_inputs=3) | x_poly_forward_distortion) * \
+                    (Mapping((2,)) | Identity(1)))
 
     ycoeff_index = lines.index('*yBackwardCoefficients 21 2')
     ycoeff_backward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
@@ -286,7 +345,8 @@ def fore2asdf(pcffore, outname, ref_kw):
     # do chromatic correction
     # the input is Xmsa, Ymsa, lam
     model_y_forward = (Mapping((0,1), n_inputs=3) | y_poly_forward) + \
-                    ((Mapping((0,1), n_inputs=3) | y_poly_forward_distortion) * Mapping((2,)))
+                    ((Mapping((0,1), n_inputs=3) | y_poly_forward_distortion) * \
+                    (Mapping((2,)) | Identity(1)))
 
     #assign inverse transforms
     model_x = model_x_forward.copy()
@@ -301,9 +361,8 @@ def fore2asdf(pcffore, outname, ref_kw):
     input2poly_mapping.inverse = Identity(2)
 
     model_poly = input2poly_mapping  | (model_x & model_y) | output2poly_mapping
-    fore_linear = (input_offset | rotation | scale | output_offset)
-    fore_linear_inverse  = fore_linear.inverse
-    fore_linear.inverse = fore_linear_inverse & Identity(1)
+
+
     model = model_poly | fore_linear
 
     f = AsdfFile()
@@ -318,7 +377,7 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
     Create a NIRSPEC disperser reference file in ASDF format.
 
     Combine information stored in disperser_G?.dis and disperser_G?_TiltY.gtp
-    files delivered by the IDT.
+    files delievred by the IDT.
 
     disperser2asdf("disperser_G140H.dis", "disperser_G140H_TiltY.gtp", "disperserG140H.asdf")
 
@@ -336,6 +395,7 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
     fasdf : asdf.AsdfFile
 
     """
+
     disperser = disfile.split('.dis')[0].split('_')[1]
     with open(disfile) as f:
         lines=[l.strip() for l in f.readlines()]
@@ -373,8 +433,7 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
             l = line.split('\n')
             n = int(l[0].split()[1])
             coeffs = {}
-            idt_coef = [float(c) for c in l[1:1+n]]
-            for i, c in enumerate(idt_coef[::-1]):
+            for i , c in enumerate([float(c) for c in l[1:1+n]]):
                 coeffs['c' + str(i)] = c
             tiltyd['tilt_model'] = models.Polynomial1D(n-1, **coeffs)
         elif line.startswith("Temperatures"):
@@ -516,30 +575,47 @@ def fpa2asdf(fpafile, outname, ref_kw):
 
     # NRS1
     ind = lines.index("*SCA491_PitchX")
-    scalex_nrs1 = models.Scale(1/float(lines[ind+1]), name='fpa_scale_x')
+    nrs1_pitchx = float(lines[ind+1])
     ind = lines.index("*SCA491_PitchY")
-    scaley_nrs1 = models.Scale(1/float(lines[ind+1]), name='fpa_scale_y')
+    nrs1_pitchy = float(lines[ind+1])
     ind = lines.index("*SCA491_RotAngle")
-    rot_nrs1 = models.Rotation2D(np.rad2deg(-float(lines[ind+1])), name='fpa_rotation')
+    nrs1_angle = np.rad2deg(float(lines[ind+1]))
     ind = lines.index("*SCA491_PosX")
-    shiftx_nrs1 = models.Shift(-float(lines[ind+1]), name='fpa_shift_x')
+    nrs1_posx = float(lines[ind+1])
     ind = lines.index("*SCA491_PosY")
-    shifty_nrs1 = models.Shift(-float(lines[ind+1]), name='fpa_shift_y')
+    nrs1_posy = float(lines[ind+1])
 
     # NRS2
     ind = lines.index("*SCA492_PitchX")
-    scalex_nrs2 = models.Scale(1/float(lines[ind+1]), name='fpa_scale_x')
+    nrs2_pitchx = float(lines[ind+1])
     ind = lines.index("*SCA492_PitchY")
-    scaley_nrs2 = models.Scale(1/float(lines[ind+1]), name='fpa_scale_y')
+    nrs2_pitchy = float(lines[ind+1])
     ind = lines.index("*SCA492_RotAngle")
-    rot_nrs2 = models.Rotation2D(np.rad2deg(float(lines[ind+1])), name='fpa_rotation')
+    nrs2_angle = np.rad2deg(float(lines[ind+1]))
     ind = lines.index("*SCA492_PosX")
-    shiftx_nrs2 = models.Shift(-float(lines[ind+1]), name='fpa_shift_x')
+    nrs2_posx = float(lines[ind+1])
     ind = lines.index("*SCA492_PosY")
-    shifty_nrs2 = models.Shift(-float(lines[ind+1]), name='fpa_shift_y')
+    nrs2_posy = float(lines[ind+1])
+
     tree = ref_kw.copy()
-    tree['NRS1'] = (shiftx_nrs1 & shifty_nrs1) | rot_nrs1 | (scalex_nrs1 & scaley_nrs1)
-    tree['NRS2'] = (shiftx_nrs2 & shifty_nrs2) | rot_nrs2 | (scalex_nrs2 & scaley_nrs2)
+    nrs1_sky2det = models.Shift(-nrs1_posx) & models.Shift(-nrs1_posy) | \
+                 models.Rotation2D(-nrs1_angle) | \
+                 models.Scale(1/nrs1_pitchx) & models.Scale(1/nrs1_pitchy)
+    nrs1_det2sky = models.Rotation2D(nrs1_angle) | \
+                 models.Scale(nrs1_pitchx) & models.Scale(nrs1_pitchy) | \
+                 models.Shift(nrs1_posx) & models.Shift(nrs1_posy)
+    nrs1_det2sky.inverse = nrs1_sky2det
+
+    nrs2_sky2det = models.Shift(-nrs2_posx) & models.Shift(-nrs2_posy) | \
+                 models.Rotation2D(-nrs2_angle) | \
+                 models.Scale(1/nrs2_pitchx) & models.Scale(1/nrs2_pitchy)
+    nrs2_det2sky = models.Rotation2D(nrs2_angle) | \
+                 models.Scale(nrs2_pitchx) & models.Scale(nrs2_pitchy) | \
+                 models.Shift(nrs2_posx) & models.Shift(nrs2_posy)
+    nrs2_det2sky.inverse = nrs1_sky2det
+
+    tree['NRS1'] = nrs1_det2sky
+    tree['NRS2'] = nrs2_sky2det
     fasdf = AsdfFile()
     fasdf.tree = tree
     fasdf.write_to(outname)
@@ -556,49 +632,37 @@ def ote2asdf(otepcf, outname, ref_kw):
         lines = [l.strip() for l in f.readlines()]
 
     factors = lines[lines.index('*Factor 2 1') + 1].split()
-
-    scale = models.Scale(1 / float(factors[0]), name="x_scale") & \
-          models.Scale(1 / float(factors[1]), name="y_scale")
-
     # this corresponds to modeling Rotation direction as is
-    rotation_angle = lines[lines.index('*Rotation') + 1]
-    rotation = models.Rotation2D(float(rotation_angle), name='rotation')
-
+    rotation_angle = float(lines[lines.index('*Rotation') + 1])
     input_rot_center = lines[lines.index('*InputRotationCentre 2 1') + 1].split()
-    output_offset = models.Shift(float(input_rot_center[0]), name='output_x_shift') & \
-                 models.Shift(float(input_rot_center[1]), name='output_y_shift')
-
-    # Here the model is called "input_shift" but in the team version it is the "output_shift".
     output_rot_center = lines[lines.index('*OutputRotationCentre 2 1') + 1].split()
-    input_offset = models.Shift(-float(output_rot_center[0]), name='input_x_shift') & \
-                  models.Shift(-float(output_rot_center[1]), name='input_y_shift')
+
+    mlinear = homothetic_det2sky(input_rot_center, rotation_angle, factors, output_rot_center)
 
     degree = int(lines[lines.index('*FitOrder') + 1])
-
-    xcoeff_index = lines.index('*xForwardCoefficients 21 2')
-    xlines = lines[xcoeff_index + 1].split('\t')
-    xcoeff_forward = coeffs_from_pcf(degree, xlines)
-    x_poly_backward = models.Polynomial2D(degree, name='x_poly_backward', **xcoeff_forward)
-
-    ycoeff_index = lines.index('*yForwardCoefficients 21 2')
-    ylines = lines[ycoeff_index + 1].split('\t')
-    ycoeff_forward = coeffs_from_pcf(degree, ylines)
-    y_poly_backward = models.Polynomial2D(degree, name='y_poly_backward', **ycoeff_forward)
 
     xcoeff_index = lines.index('*xBackwardCoefficients 21 2')
     xlines = lines[xcoeff_index + 1].split('\t')
     xcoeff_backward = coeffs_from_pcf(degree, xlines)
     x_poly_forward = models.Polynomial2D(degree, name='x_poly_forward', **xcoeff_backward)
 
+    xcoeff_index = lines.index('*xForwardCoefficients 21 2')
+    xlines = lines[xcoeff_index + 1].split('\t')
+    xcoeff_forward = coeffs_from_pcf(degree, xlines)
+    x_poly_backward = models.Polynomial2D(degree, name='x_poly_backward', **xcoeff_forward)
+
     ycoeff_index = lines.index('*yBackwardCoefficients 21 2')
     ylines = lines[ycoeff_index + 1].split('\t')
     ycoeff_backward = coeffs_from_pcf(degree, ylines)
     y_poly_forward = models.Polynomial2D(degree, name='y_poly_forward', **ycoeff_backward)
 
+    ycoeff_index = lines.index('*yForwardCoefficients 21 2')
+    ylines = lines[ycoeff_index + 1].split('\t')
+    ycoeff_forward = coeffs_from_pcf(degree, ylines)
+    y_poly_backward = models.Polynomial2D(degree, name='y_poly_backward', **ycoeff_forward)
+
     x_poly_forward.inverse = x_poly_backward
     y_poly_forward.inverse = y_poly_backward
-
-    mlinear = input_offset | rotation | scale | output_offset
 
     output2poly_mapping = Identity(2, name='output_mapping')
     output2poly_mapping.inverse = Mapping([0, 1, 0, 1])
@@ -614,7 +678,7 @@ def ote2asdf(otepcf, outname, ref_kw):
     f.tree = ref_kw.copy()
     f.tree['model'] = model
     f.write_to(outname)
-
+    return model_poly, mlinear
 
 
 ref_files = "/internal/1/astropy/embray-compound-mdboom-gwcs3/models/nirspec-model-2014"
@@ -673,11 +737,10 @@ def nirspec_models_to_asdf():
         filename = "Fore_{0}.pcf".format(filter)
         fore_refname = os.path.join(ref_files, "CoordTransform", filename)
         fore_name = "jwst_nirspec_fore_000{0}.asdf".format(str(i+1))
-        # "fore_f070lp.asdf"
         try:
             fore2asdf(fore_refname, fore_name, ref_kw)
         except:
-            print("FORE file was not created - filter {0}".format(filter))
+            print(("FORE file was not created - filter {0}".format(filter)))
             raise
         ref[filter] = fore_name
 
@@ -689,11 +752,11 @@ def nirspec_models_to_asdf():
         dis_file = "disperser_" + grating + ".dis"
         gtpy_file = "disperser_" + grating + "_TiltY.gtp"
         gtpx_file = "disperser_" + grating + "_TiltX.gtp"
-        disp_refname = os.path.join(ref_files, "Description", dis_file)#"disperser_G140H.dis")
-        tilty_refname = os.path.join(ref_files, "Description", gtpy_file)#"disperser_G140H_TiltY.gtp")
+        disp_refname = os.path.join(ref_files, "Description", dis_file)
+        tilty_refname = os.path.join(ref_files, "Description", gtpy_file)
         tiltx_refname = os.path.join(ref_files, "Description", gtpx_file)
         disperser_name =  "jwst_nirspec_disperser_000{0}.asdf".format(str(i+1))
-        #"disperserG140H.asdf"
+
         try:
             disperser2asdf(disp_refname, tilty_refname, tiltx_refname, disperser_name, ref_kw)
         except:
