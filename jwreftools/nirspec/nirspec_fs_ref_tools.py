@@ -516,10 +516,7 @@ def msa2asdf(msafile, outname, ref_kw):
     """
     Create an asdf reference file with the MSA description.
 
-    The CDP2 delivery includes a fits file - "MSA.msa".
-    This file is converted to asdf and serves as a reference file of type "REGIONS".
-
-    mas2asfdf("MSA.msa", "msa.asdf") --> creates an 85MB file
+    mas2asfdf("MSA.msa", "msa.asdf")
 
     Parameters
     ----------
@@ -535,16 +532,18 @@ def msa2asdf(msafile, outname, ref_kw):
     shiftx = models.Shift(header['SLITXREF'], name='slit_xref')
     shifty = models.Shift(header['SLITYREF'], name='slit_yref')
     slitrot = models.Rotation2D(header['SLITROT'], name='slit_rot')
-    for j, slit in enumerate(['S200A1', 'S200A2', 'S400A1', 'S1600A1', 'S200B1', 'IFU']):
-        slitdata = data[j]
-        t = {}
-        for i, s in enumerate(['xcenter', 'ycenter', 'xsize', 'ysize']):
-            t[s] = slitdata[i+1]
-        model = models.Scale(t['xsize']) & models.Scale(t['ysize']) | \
-              models.Shift(t['xcenter']) & models.Shift(t['ycenter']) | \
-              slitrot | shiftx & shifty
-        t['model'] = model
-        tree[slit] = t
+
+    tree[5] = {}
+    tree[5]['model'] = slitrot | shiftx & shifty
+    tree[5]['data'] = f[5].data
+    for i in range(1, 5):
+        header = f[i].header
+        shiftx = models.Shift(header['QUADXREF'], name='msa_xref')
+        shifty = models.Shift(header['QUADYREF'], name='msa_yref')
+        slitrot = models.Rotation2D(header['QUADROT'], name='msa_rot')
+        tree[i] = {}
+        tree[i]['model'] = slitrot | shiftx & shifty
+        tree[i]['data'] = f[i].data
 
     f.close()
     fasdf = AsdfFile()
@@ -679,6 +678,131 @@ def ote2asdf(otepcf, outname, ref_kw):
     f.tree['model'] = model
     f.write_to(outname)
     return model_poly, mlinear
+
+
+def ifu_slicer2asdf(ifuslicer, outname):
+    """
+    Create an asdf reference file with the MSA description.
+
+    ifu_slicer2asdf("IFU_slicer.sgd", "ifu_slicer.asdf")
+
+    Parameters
+    ----------
+    ifuslicer : str
+        A fits file with the IFU slicer description
+    outname : str
+        Name of output ASDF file.
+    """
+    ref_kw = common_reference_file_keywords("IFUSLICER", "NIRSPEC IFU SLICER description - CDP4")
+    f = fits.open(ifuslicer)
+    tree = ref_kw.copy()
+    data = f[1].data
+    header = f[1].header
+    shiftx = models.Shift(header['XREF'], name='ifu_slicer_xref')
+    shifty = models.Shift(header['YREF'], name='ifu_slicer_yref')
+    rot = models.Rotation2D(header['ROT'], name='ifu_slicer_rot')
+    model = rot | shiftx & shifty
+    tree['model'] = model
+    tree['data'] = f[1].data
+    f.close()
+    fasdf = AsdfFile()
+    fasdf.tree = tree
+    fasdf.write_to(outname)
+    return fasdf
+
+
+def ifupost2asdf(ifupost_files, outname):
+    """
+    Create a reference file of type ``ifupost`` .
+
+    Combines all IDT ``IFU-POST`` reference files in one ASDF file.
+
+    forward direction : MSA to Collimator
+    backward_direction: MSA to Collimator
+
+    Parameters
+    ----------
+    ifupost_files : list
+        Names of all ``IFU-POST`` IDT reference files
+    outname : str
+        Name of output ``ASDF`` file
+    """
+    ref_kw = common_reference_file_keywords("IFUPOST", "NIRSPEC IFU-POST transforms - CDP4")
+    fa = AsdfFile()
+    fa.tree = ref_kw
+    for fifu in ifupost_files:
+        n = int((fifu.split('IFU-POST_')[1]).split('.pcf')[0])
+        fa.tree[n] = {}
+        with open(fifu) as f:
+            lines = [l.strip() for l in f.readlines()]
+        ifupost_det2sky = linear_from_pcf_det2sky(fifu)
+        ifupost_linear = ifupost_det2sky
+        ifupost_linear.inverse = ifupost_det2sky.inverse & Identity(1)
+        # compute the polynomial
+        degree = int(lines[lines.index('*FitOrder') + 1])
+        xcoeff_index = lines.index('*xForwardCoefficients 21 2')
+        xlines = lines[xcoeff_index + 1: xcoeff_index + 22]
+        xcoeff_forward = coeffs_from_pcf(degree, xlines)
+        # Polynomial Correction in x
+        x_poly_backward = models.Polynomial2D(degree, name="x_poly_backward", **xcoeff_forward)
+        xlines_distortion = lines[xcoeff_index + 22: xcoeff_index + 43]
+        xcoeff_forward_distortion = coeffs_from_pcf(degree, xlines_distortion)
+        x_poly_backward_distortion = models.Polynomial2D(degree, name="x_backward_distortion",
+                                                         **xcoeff_forward_distortion)
+
+        # do chromatic correction
+        # the input is Xote, Yote, lam
+        model_x_backward = (Mapping((0, 1), n_inputs=3) | x_poly_backward) + \
+            ((Mapping((0,1), n_inputs=3) | x_poly_backward_distortion) * \
+                 (Mapping((2,)) | Identity(1)))
+        ycoeff_index = lines.index('*yForwardCoefficients 21 2')
+        ycoeff_forward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
+        y_poly_backward = models.Polynomial2D(degree, name="y_poly_backward", **ycoeff_forward)
+        ylines_distortion = lines[ycoeff_index + 22: ycoeff_index + 43]
+        ycoeff_forward_distortion = coeffs_from_pcf(degree, ylines_distortion)
+        y_poly_backward_distortion = models.Polynomial2D(degree, name="y_backward_distortion",
+                                                         **ycoeff_forward_distortion)
+        # do chromatic correction
+        # the input is Xote, Yote, lam
+        model_y_backward = (Mapping((0,1), n_inputs=3) | y_poly_backward) + \
+            ((Mapping((0, 1), n_inputs=3) | y_poly_backward_distortion) * \
+                 (Mapping((2,)) | Identity(1) ))
+        xcoeff_index = lines.index('*xBackwardCoefficients 21 2')
+        xcoeff_backward = coeffs_from_pcf(degree, lines[xcoeff_index + 1: xcoeff_index + 22])
+        x_poly_forward = models.Polynomial2D(degree,name="x_poly_forward", **xcoeff_backward)
+        xcoeff_backward_distortion = coeffs_from_pcf(degree, lines[xcoeff_index + 22: xcoeff_index + 43])
+        x_poly_forward_distortion = models.Polynomial2D(degree, name="x_forward_distortion", **xcoeff_backward_distortion)
+
+        # the chromatic correction is done here
+        # the input is Xmsa, Ymsa, lam
+        model_x_forward = (Mapping((0,1), n_inputs=3) | x_poly_forward) + \
+            ((Mapping((0,1), n_inputs=3) | x_poly_forward_distortion) * \
+                 (Mapping((2,)) | Identity(1)))
+        ycoeff_index = lines.index('*yBackwardCoefficients 21 2')
+        ycoeff_backward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
+        y_poly_forward = models.Polynomial2D(degree, name="y_poly_forward",**ycoeff_backward)
+        ycoeff_backward_distortion = coeffs_from_pcf(degree, lines[ycoeff_index + 22: ycoeff_index + 43])
+        y_poly_forward_distortion = models.Polynomial2D(degree, name="y_forward_distortion",
+                                                        **ycoeff_backward_distortion)
+        # do chromatic correction
+        # the input is Xmsa, Ymsa, lam
+        model_y_forward = (Mapping((0,1), n_inputs=3) | y_poly_forward) + \
+            ((Mapping((0,1), n_inputs=3) | y_poly_forward_distortion) * \
+                 (Mapping((2,)) | Identity(1)))
+       #assign inverse transforms
+        model_x = model_x_forward.copy()
+        model_y = model_y_forward.copy()
+        model_x.inverse = model_x_backward
+        model_y.inverse = model_y_backward
+        output2poly_mapping = Identity(2, name="output_mapping")
+        output2poly_mapping.inverse = Mapping([0, 1, 2, 0, 1, 2])
+        input2poly_mapping = Mapping([0, 1, 2, 0, 1, 2], name="input_mapping")
+        input2poly_mapping.inverse = Identity(2)
+        model_poly = input2poly_mapping | (model_x & model_y) | output2poly_mapping
+        model = model_poly | ifupost_linear
+        fa.tree[n]['model'] = model
+    asdffile = fa.write_to(outname)
+    return asdffile
 
 
 ref_files = "/internal/1/astropy/embray-compound-mdboom-gwcs3/models/nirspec-model-2014"
