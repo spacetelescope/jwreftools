@@ -16,6 +16,8 @@ from __future__ import (absolute_import, unicode_literals, division,
 import glob
 import os.path
 import numpy as np
+import re
+import string
 from astropy.io import fits
 from asdf import AsdfFile
 from astropy.modeling import models
@@ -23,6 +25,7 @@ from astropy.modeling.models import Mapping, Identity
 
 
 def common_reference_file_keywords(reftype, title):
+    """Create common reference file keywords."""
     ref_file_common_keywords = {"reftype": reftype,
                                 "title": title,
                                 "pedigree": "GROUND",
@@ -31,6 +34,69 @@ def common_reference_file_keywords(reftype, title):
                                 "exp_type": "NRS_FIXEDSLIT"
                                 }
     return ref_file_common_keywords
+
+
+def dict_from_file(flist):
+    """Read in a file and return a dict of the key value pairs.
+
+    This is a generic read for a text file with the following format
+
+    keywords which start with any punctuation character except + or -
+    keyword sections separated by a blank line
+
+    example file: disperser_PRISM_TiltX.gtp
+    if you feed a list of files the last unique parameter from all the files
+    will be saved. Multiple values are saved as a list
+    """
+    # + and - not allowed as tokens
+    tokens = string.punctuation.replace('-', '').replace('+', '')
+    letters = re.compile("(^[a-zA-Z])")  # starts with a letter, make string
+    numbers = re.compile("(^(?:[+\-])?(?:\d*)(?:\.\d*)?(?:[eE][+\-]?\d*$)?)")
+    empty = re.compile("(^\s*$)")  # is a blank line
+
+    if isinstance(flist, str):
+        flist = [flist]
+    parameters = dict()
+    for name in flist:
+        print("\nReading {}  ...".format(name))
+        with open(name, 'r') as fh:
+            lines = fh.readlines()
+        value = list()
+        key = ''
+
+        for line in lines:
+            if not empty.match(line):
+                if line[0] in tokens:
+                    if not key:
+                        key = line[1:].split()[0].strip()  # first word only
+                elif letters.match(line):
+                    value.append(line.strip())
+                elif numbers.fullmatch(line):
+                        value.append(eval(line))
+                elif numbers.match(line):
+                    if numbers.fullmatch(line):
+                        value.append(eval(line.strip()))
+                    else:
+                        newline = line.split()
+                        if len(newline) > 0:
+                            for n in newline:
+                                if numbers.fullmatch(n):
+                                    value.append(eval(n))
+                                else:
+                                    value.append(n.strip())
+                else:
+                    value.append(line.strip())
+            else:
+                if key and value:
+                    parameters[key] = value
+                    print("Setting {0:s} = {1}".format(key, value))
+                key = ''
+                value = list()
+        if key and value:  # save final value if file ends without blank lines
+            parameters[key] = value
+            print("Setting {0:s} = {1}".format(key, value))
+
+        return parameters
 
 
 def coeffs_from_pcf(degree, coeffslist):
@@ -45,6 +111,9 @@ def coeffs_from_pcf(degree, coeffslist):
             else:
                 continue
     return coeffs
+
+
+
 
 def pcf_forward(pcffile, outname):
     """
@@ -372,6 +441,67 @@ def fore2asdf(pcffore, outname, ref_kw):
     return asdffile
 
 
+def prism2asdf(prifile, tiltyfile, tiltxfile, outname):
+    """Create a NIRSPEC prism disperser reference file in ASDF format.
+
+    Combine information stored in disperser_G?.dis and disperser_G?_TiltY.gtp
+    files delievred by the IDT.
+
+
+    Parameters
+    ----------
+    prifile : list or str
+        File with primary information for the PRSIM
+    tiltyfile : str
+        File with tilt_Y data, e.g. disperser_PRISM_TiltY.gtp.
+    tiltxfile: str
+        File with tilt_x data, e.g. disperser_PRISM_TiltX.gtp.
+    outname : str
+        Name of output ASDF file.
+
+    Returns
+    -------
+    fasdf : asdf.AsdfFile
+
+    """
+
+    params = common_reference_file_keywords("PRISM", "NIRSPEC PRISM Model")
+    flist = [prifile, tiltyfile, tiltxfile]
+
+    # translate the files
+    for fname in flist:
+        try:
+            refparams = dict_from_file(fname)
+        except:
+            print("Disperser file was not converted.")
+            raise
+
+        pdict = {}
+        coeffs = {}
+        parts = fname.lower().split(".")[0]
+        ref = str("_".join(parts.split("_")[1:]))
+
+        if "pri" not in fname:
+            try:
+                for i, c in enumerate(refparams['CoeffsTemperature00']):
+                    coeffs['c' + str(i)] = c
+                pdict['tilt_model'] = models.Polynomial1D(len(coeffs)-1, **coeffs)
+                del refparams['CoeffsTemperature00']
+            except KeyError:
+                print("Missing CoeffsTemperature in {0}".format(fname))
+                raise
+
+        # store the rest of the keys
+        for k, v in refparams.items():
+            pdict[k] = v
+        print(pdict)
+        params[ref] = pdict
+
+    fasdf = AsdfFile()
+    fasdf.tree = params
+    fasdf.write_to(outname)
+    return fasdf
+
 def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
     """
     Create a NIRSPEC disperser reference file in ASDF format.
@@ -395,7 +525,6 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
     fasdf : asdf.AsdfFile
 
     """
-
     disperser = disfile.split('.dis')[0].split('_')[1]
     with open(disfile) as f:
         lines=[l.strip() for l in f.readlines()]
@@ -474,9 +603,6 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
         elif line.startswith("Unit"):
             tiltxd['unit'] = line.split('\n')[1]
 
-        """
-        TODO: add prism specific coefficients, get_disperser_info.pro
-        """
 
     d['gwa_tiltx'] = tiltyd
     d['gwa_tilty'] = tiltxd
