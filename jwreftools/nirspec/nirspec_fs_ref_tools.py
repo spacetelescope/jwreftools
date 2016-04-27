@@ -22,14 +22,21 @@ from astropy.modeling import models
 from astropy.modeling.models import Mapping, Identity
 
 
-def common_reference_file_keywords(reftype, title):
-    ref_file_common_keywords = {"reftype": reftype,
-                                "title": title,
-                                "pedigree": "GROUND",
-                                "author": "N. Dencheva",
-                                "instrument": "NIRSPEC",
-                                "exp_type": "NRS_FIXEDSLIT"
+def common_reference_file_keywords(reftype, title, description, exp_type,
+                                   useafter, author, **kwargs):
+    """
+    exp_type can be also "N/A", or "ANY".
+    """
+    ref_file_common_keywords = {"REFTYPE": reftype,
+                                "TITLE": title,
+                                "PEDIGREE": "GROUND",
+                                "AUTHOR": author,
+                                "INSTRUMENT": "NIRSPEC",
+                                "EXP_TYPE": exp_type,
+                                "TELESCOP": "JWST",
+                                "USEAFTER": useafter
                                 }
+    ref_file_common_keywords.update(kwargs)
     return ref_file_common_keywords
 
 
@@ -680,7 +687,7 @@ def ote2asdf(otepcf, outname, ref_kw):
     return model_poly, mlinear
 
 
-def ifu_slicer2asdf(ifuslicer, outname):
+def ifu_slicer2asdf(ifuslicer, outname, ref_kw):
     """
     Create an asdf reference file with the MSA description.
 
@@ -693,7 +700,6 @@ def ifu_slicer2asdf(ifuslicer, outname):
     outname : str
         Name of output ASDF file.
     """
-    ref_kw = common_reference_file_keywords("IFUSLICER", "NIRSPEC IFU SLICER description - CDP4")
     f = fits.open(ifuslicer)
     tree = ref_kw.copy()
     data = f[1].data
@@ -711,7 +717,7 @@ def ifu_slicer2asdf(ifuslicer, outname):
     return fasdf
 
 
-def ifupost2asdf(ifupost_files, outname):
+def ifupost2asdf(ifupost_files, outname, ref_kw):
     """
     Create a reference file of type ``ifupost`` .
 
@@ -727,7 +733,6 @@ def ifupost2asdf(ifupost_files, outname):
     outname : str
         Name of output ``ASDF`` file
     """
-    ref_kw = common_reference_file_keywords("IFUPOST", "NIRSPEC IFU-POST transforms - CDP4")
     fa = AsdfFile()
     fa.tree = ref_kw
     for fifu in ifupost_files:
@@ -776,7 +781,7 @@ def ifupost2asdf(ifupost_files, outname):
 ref_files = "/internal/1/astropy/embray-compound-mdboom-gwcs3/models/nirspec-model-2014"
 
 
-def nirspec_models_to_asdf():
+def nirspec_models_to_asdf_build5():
     ref = {}
     camera_refname = os.path.join(ref_files, "CoordTransform", "Camera.pcf")
     camera_name = "jwst_nirspec_camera_0001.asdf"
@@ -865,3 +870,153 @@ def nirspec_models_to_asdf():
         print("OTE file was not converted.")
         raise
     ref["OTE"] = ote_name
+
+
+def nirspec_models_to_asdf_build6():
+    ref = {}
+    camera_refname = os.path.join(ref_files, "CoordTransform", "Camera.pcf")
+    camera_name = "jwst_nirspec_camera_0001.asdf"
+    history = """
+
+    """
+    ref_kw = common_reference_file_keywords(reftype="CAMERA", title="NIRSPEC Camera Model - CDP4",
+                                            description="Cold asbuilt CAM transform, distortion fitted with FM2 CAL phase data.",
+                                            exp_type="N/A", useafter="1900-01-01 00:00:00", author="N. Dencheva")
+    try:
+        pcf2asdf(camera_refname, camera_name, ref_kw)
+    except:
+        print("Camera file was not converted.")
+        raise
+    ref["CAMERA"] = camera_name
+
+    ref_kw = common_reference_file_keywords(reftype="COLLIMATOR", title="NIRSPEC Collimator Model - CDP4",
+                                            description="Cold asbuilt COL transform, distortion fitted with FM2 CAL phase data.",
+                                            exp_type="N/A", useafter="1900-01-01 00:00:00", author="N. Dencheva")
+    collimator_refname = os.path.join(ref_files, "CoordTransform", "Collimator.pcf")
+    collimator_name = "jwst_nirspec_collimator_0001.asdf"
+    try:
+        pcf2asdf(collimator_refname, collimator_name, ref_kw)
+    except:
+        print("Collimator file was not converted.")
+        raise
+    ref["COLLIMATOR"] = collimator_name
+
+    ref_kw = common_reference_file_keywords(reftype="WAVELENGTHRANGE", title="NIRSPEC Spectral Configurations - CDP4",
+                                            description="Spectral configurations and scientific ranges.",
+                                            exp_type="N/A", useafter="1900-01-01 00:00:00", author="N. Dencheva")
+    wavelengthrange_name = "jwst_nirspec_wavelengthrange_0001.asdf"
+    wavelength_range('spectralconfigurations.txt', wavelengthrange_name, ref_kw)
+    ref["WAVELENGTHRANGE"] = wavelengthrange_name
+
+    ref_kw = common_reference_file_keywords(reftype="MSA", title="NIRSPEC MSA Description - CDP4",
+                                            description="MSA model, fitted with FM2 CAL phase data.",
+                                            exp_type="N/A", useafter="1900-01-01 00:00:00", author="N. Dencheva")
+    mas_refname = os.path.join(ref_files, "Description", "MSA.msa")
+    msa_name = "jwst_nirspec_msa_0001.asdf"
+    try:
+        msa2asdf(mas_refname, msa_name, ref_kw)
+    except:
+        print("MSA file was not converted")
+        raise
+    ref['MSA'] = msa_name
+
+    ref_kw = common_reference_file_keywords(reftype="FPA", title="NIRSPEC FPA Description - CDP4",
+                                            description="FPA model, fitted with FM2 CAL phase data.",
+                                            exp_type="N/A", useafter="1900-01-01 00:00:00", author="N. Dencheva")
+    fpa_refname = os.path.join(ref_files, "Description", "FPA.fpa")
+    fpa_name = "jwst_nirspec_fpa_0001.asdf"
+    try:
+        fpa2asdf(fpa_refname, fpa_name, ref_kw)
+    except:
+        print("FPA file was not converted.")
+        raise
+    ref["FPA"] = fpa_name
+
+    for i, filter in enumerate(["CLEAR", "F070LP", "F100LP", "F110W", "F140X", "F170LP", "F290LP"]):
+        ref_kw = common_reference_file_keywords(reftype="FORE", title="NIRSPEC FORE Model - CDP4",
+                                                description="FORE transform.",
+                                                exp_type="N/A", useafter="1900-01-01 00:00:00", author="N. Dencheva")
+        ref_kw['filter'] = filter
+        filename = "Fore_{0}.pcf".format(filter)
+        fore_refname = os.path.join(ref_files, "CoordTransform", filename)
+        fore_name = "jwst_nirspec_fore_000{0}.asdf".format(str(i+1))
+        try:
+            fore2asdf(fore_refname, fore_name, ref_kw)
+        except:
+            print(("FORE file was not created - filter {0}".format(filter)))
+            raise
+        ref["fore"] = fore_name
+
+    for i, grating in enumerate(["G140H", "G140M", "G235H", "G235M", "G395H", "G395M", "MIRROR"]):
+        # disperser refers to the whole reference file, either on disk or asdf
+        # grating to the parameter the reference file is selected on
+        ref_kw = common_reference_file_keywords(reftype="DISPERSER", title="NIRSPEC Disperser Description - CDP4",
+                                                description="Grating as built description, tilt x/y/z fitted with FM2 CAL phase data.",
+                                                exp_type="N/A", useafter="1900-01-01 00:00:00", author="N. Dencheva")
+        ref_kw['grating'] = grating
+        dis_file = "disperser_" + grating + ".dis"
+        gtpy_file = "disperser_" + grating + "_TiltY.gtp"
+        gtpx_file = "disperser_" + grating + "_TiltX.gtp"
+        disp_refname = os.path.join(ref_files, "Description", dis_file)
+        tilty_refname = os.path.join(ref_files, "Description", gtpy_file)
+        tiltx_refname = os.path.join(ref_files, "Description", gtpx_file)
+        disperser_name =  "jwst_nirspec_disperser_000{0}.asdf".format(str(i+1))
+
+        try:
+            disperser2asdf(disp_refname, tilty_refname, tiltx_refname, disperser_name, ref_kw)
+        except:
+            print("Disperser file was not converted.")
+            raise
+        ref["DISPERSER"] = disperser_name
+
+    ref_kw = common_reference_file_keywords(reftype="OTE", title="NIRSPEC OTE Model - CDP4",
+                                            description="As-designed OTE coordinate transform from cold Zemax model.",
+                                            exp_type="N/A", useafter="1900-01-01 00:00:00", author="N. Dencheva")
+    ote_refname = os.path.join(ref_files, "CoordTransform", "OTE.pcf")
+    ote_name = "jwst_nirspec_ote_0001.asdf"
+    try:
+        ote2asdf(ote_refname, ote_name, ref_kw)
+    except:
+        print("OTE file was not converted.")
+        raise
+    ref["OTE"] = ote_name
+
+    ref_kw = common_reference_file_keywords(reftype="IFUFORE", title="NIRSPEC IFU FORE Model - CDP4",
+                                                description="IFU FORE transform.",
+                                                exp_type="NRS_IFU", useafter="1900-01-01 00:00:00", author="N. Dencheva")
+    filename = "IFU_FORE.pcf"
+    ifufore_refname = os.path.join(ref_files, "CoordTransform", "IFU", filename)
+    ifufore_name = "jwst_nirspec_ifufore_0001.asdf"
+    try:
+        fore2asdf(ifufore_refname, ifufore_name, ref_kw)
+    except:
+        print("FORE file was not created.")
+        raise
+    ref["ifufore"] = ifufore_name
+
+    ref_kw = common_reference_file_keywords(reftype="IFUPOST", title="NIRSPEC IFU-POST transforms - CDP4",
+                                            description="Cold design IFU transform, cout x+y fitted with FF/Argon/IMA exposures.",
+                                            exp_type="NRS_IFU", useafter="1900-01-01 00:00:00", author="N. Dencheva")
+    filenames = glob.glob("IFU_POST*.pcf")
+    ifupost_refname = [os.path.join(ref_files, "CoordTransform", "IFU", filename) for filename in filenames]
+    ifupost_name = "jwst_nirspec_ifupost_0001.asdf"
+    try:
+        ifupost2asdf(ifupost_refname, ifupost_name, ref_kw)
+    except:
+        print("IFUPOST file was not created.")
+        raise
+    ref["ifupost"] = ifupost_name
+
+    ref_kw = common_reference_file_keywords(reftype="IFUSLICER", title="NIRSPEC IFU SLICER description - CDP4",
+                                            description="Perfect slicer with 30 slices of size of 0.8 mm x 12 mm. No tilt.",
+                                            exp_type="NRS_IFU", useafter="1900-01-01 00:00:00", author="N. Dencheva")
+    ifuslicer_refname = os.path.join(ref_files, "Description", "IFU_slicer.sgd")
+    ifuslicer_name = "jwst_nirspec_ifuslicer_0001.asdf"
+    try:
+        ifu_slicer2asdf(ifuslicer_refname, ifuslicer_name, ref_kw)
+    except:
+        print("IFUSLICER file was not created.")
+        raise
+    ref["ifuslicer"] = ifuslicer_name
+
+    return ref
