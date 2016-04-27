@@ -718,7 +718,7 @@ def ifupost2asdf(ifupost_files, outname):
     Combines all IDT ``IFU-POST`` reference files in one ASDF file.
 
     forward direction : MSA to Collimator
-    backward_direction: MSA to Collimator
+    backward_direction: Collimator to MSA
 
     Parameters
     ----------
@@ -735,71 +735,39 @@ def ifupost2asdf(ifupost_files, outname):
         fa.tree[n] = {}
         with open(fifu) as f:
             lines = [l.strip() for l in f.readlines()]
-        ifupost_det2sky = linear_from_pcf_det2sky(fifu)
-        ifupost_linear = ifupost_det2sky
-        ifupost_linear.inverse = ifupost_det2sky.inverse & Identity(1)
-        # compute the polynomial
+        factors = lines[lines.index('*Factor 2') + 1].split()
+        rotation_angle = float(lines[lines.index('*Rotation') + 1])
+        input_rot_center = lines[lines.index('*InputRotationCentre 2') + 1].split()
+        output_rot_center = lines[lines.index('*OutputRotationCentre 2') + 1].split()
+        linear_sky2det = homothetic_sky2det(input_rot_center, rotation_angle, factors, output_rot_center)
+
         degree = int(lines[lines.index('*FitOrder') + 1])
+
         xcoeff_index = lines.index('*xForwardCoefficients 21 2')
         xlines = lines[xcoeff_index + 1: xcoeff_index + 22]
         xcoeff_forward = coeffs_from_pcf(degree, xlines)
-        # Polynomial Correction in x
-        x_poly_backward = models.Polynomial2D(degree, name="x_poly_backward", **xcoeff_forward)
-        xlines_distortion = lines[xcoeff_index + 22: xcoeff_index + 43]
-        xcoeff_forward_distortion = coeffs_from_pcf(degree, xlines_distortion)
-        x_poly_backward_distortion = models.Polynomial2D(degree, name="x_backward_distortion",
-                                                         **xcoeff_forward_distortion)
+        x_poly_forward = models.Polynomial2D(degree, name='x_poly_forward', **xcoeff_forward)
 
-        # do chromatic correction
-        # the input is Xote, Yote, lam
-        model_x_backward = (Mapping((0, 1), n_inputs=3) | x_poly_backward) + \
-            ((Mapping((0,1), n_inputs=3) | x_poly_backward_distortion) * \
-                 (Mapping((2,)) | Identity(1)))
         ycoeff_index = lines.index('*yForwardCoefficients 21 2')
         ycoeff_forward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
-        y_poly_backward = models.Polynomial2D(degree, name="y_poly_backward", **ycoeff_forward)
-        ylines_distortion = lines[ycoeff_index + 22: ycoeff_index + 43]
-        ycoeff_forward_distortion = coeffs_from_pcf(degree, ylines_distortion)
-        y_poly_backward_distortion = models.Polynomial2D(degree, name="y_backward_distortion",
-                                                         **ycoeff_forward_distortion)
-        # do chromatic correction
-        # the input is Xote, Yote, lam
-        model_y_backward = (Mapping((0,1), n_inputs=3) | y_poly_backward) + \
-            ((Mapping((0, 1), n_inputs=3) | y_poly_backward_distortion) * \
-                 (Mapping((2,)) | Identity(1) ))
+        y_poly_forward = models.Polynomial2D(degree, name='y_poly_forward', **ycoeff_forward)
+
         xcoeff_index = lines.index('*xBackwardCoefficients 21 2')
         xcoeff_backward = coeffs_from_pcf(degree, lines[xcoeff_index + 1: xcoeff_index + 22])
-        x_poly_forward = models.Polynomial2D(degree,name="x_poly_forward", **xcoeff_backward)
-        xcoeff_backward_distortion = coeffs_from_pcf(degree, lines[xcoeff_index + 22: xcoeff_index + 43])
-        x_poly_forward_distortion = models.Polynomial2D(degree, name="x_forward_distortion", **xcoeff_backward_distortion)
+        x_poly_backward = models.Polynomial2D(degree, name='x_poly_backward', **xcoeff_backward)
 
-        # the chromatic correction is done here
-        # the input is Xmsa, Ymsa, lam
-        model_x_forward = (Mapping((0,1), n_inputs=3) | x_poly_forward) + \
-            ((Mapping((0,1), n_inputs=3) | x_poly_forward_distortion) * \
-                 (Mapping((2,)) | Identity(1)))
         ycoeff_index = lines.index('*yBackwardCoefficients 21 2')
         ycoeff_backward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
-        y_poly_forward = models.Polynomial2D(degree, name="y_poly_forward",**ycoeff_backward)
-        ycoeff_backward_distortion = coeffs_from_pcf(degree, lines[ycoeff_index + 22: ycoeff_index + 43])
-        y_poly_forward_distortion = models.Polynomial2D(degree, name="y_forward_distortion",
-                                                        **ycoeff_backward_distortion)
-        # do chromatic correction
-        # the input is Xmsa, Ymsa, lam
-        model_y_forward = (Mapping((0,1), n_inputs=3) | y_poly_forward) + \
-            ((Mapping((0,1), n_inputs=3) | y_poly_forward_distortion) * \
-                 (Mapping((2,)) | Identity(1)))
-       #assign inverse transforms
-        model_x = model_x_forward.copy()
-        model_y = model_y_forward.copy()
-        model_x.inverse = model_x_backward
-        model_y.inverse = model_y_backward
-        output2poly_mapping = Identity(2, name="output_mapping")
-        output2poly_mapping.inverse = Mapping([0, 1, 2, 0, 1, 2])
-        input2poly_mapping = Mapping([0, 1, 2, 0, 1, 2], name="input_mapping")
+        y_poly_backward = models.Polynomial2D(degree, name='y_poly_backward', **ycoeff_backward)
+
+        output2poly_mapping = Identity(2, name='output_mapping')
+        output2poly_mapping.inverse = Mapping([0, 1, 0, 1])
+        input2poly_mapping = Mapping([0, 1, 0, 1], name='input_mapping')
         input2poly_mapping.inverse = Identity(2)
-        model_poly = input2poly_mapping | (model_x & model_y) | output2poly_mapping
-        model = model_poly | ifupost_linear
+
+        model_poly = input2poly_mapping | (x_poly_forward & y_poly_forward) | output2poly_mapping
+
+        model = linear_sky2det | model_poly
         fa.tree[n]['model'] = model
     asdffile = fa.write_to(outname)
     return asdffile
