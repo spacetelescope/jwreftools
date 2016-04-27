@@ -642,10 +642,7 @@ def msa2asdf(msafile, outname, ref_kw):
     """
     Create an asdf reference file with the MSA description.
 
-    The CDP2 delivery includes a fits file - "MSA.msa".
-    This file is converted to asdf and serves as a reference file of type "REGIONS".
-
-    mas2asfdf("MSA.msa", "msa.asdf") --> creates an 85MB file
+    mas2asfdf("MSA.msa", "msa.asdf")
 
     Parameters
     ----------
@@ -661,16 +658,18 @@ def msa2asdf(msafile, outname, ref_kw):
     shiftx = models.Shift(header['SLITXREF'], name='slit_xref')
     shifty = models.Shift(header['SLITYREF'], name='slit_yref')
     slitrot = models.Rotation2D(header['SLITROT'], name='slit_rot')
-    for j, slit in enumerate(['S200A1', 'S200A2', 'S400A1', 'S1600A1', 'S200B1', 'IFU']):
-        slitdata = data[j]
-        t = {}
-        for i, s in enumerate(['xcenter', 'ycenter', 'xsize', 'ysize']):
-            t[s] = slitdata[i+1]
-        model = models.Scale(t['xsize']) & models.Scale(t['ysize']) | \
-              models.Shift(t['xcenter']) & models.Shift(t['ycenter']) | \
-              slitrot | shiftx & shifty
-        t['model'] = model
-        tree[slit] = t
+
+    tree[5] = {}
+    tree[5]['model'] = slitrot | shiftx & shifty
+    tree[5]['data'] = f[5].data
+    for i in range(1, 5):
+        header = f[i].header
+        shiftx = models.Shift(header['QUADXREF'], name='msa_xref')
+        shifty = models.Shift(header['QUADYREF'], name='msa_yref')
+        slitrot = models.Rotation2D(header['QUADROT'], name='msa_rot')
+        tree[i] = {}
+        tree[i]['model'] = slitrot | shiftx & shifty
+        tree[i]['data'] = f[i].data
 
     f.close()
     fasdf = AsdfFile()
@@ -805,6 +804,99 @@ def ote2asdf(otepcf, outname, ref_kw):
     f.tree['model'] = model
     f.write_to(outname)
     return model_poly, mlinear
+
+
+def ifu_slicer2asdf(ifuslicer, outname):
+    """
+    Create an asdf reference file with the MSA description.
+
+    ifu_slicer2asdf("IFU_slicer.sgd", "ifu_slicer.asdf")
+
+    Parameters
+    ----------
+    ifuslicer : str
+        A fits file with the IFU slicer description
+    outname : str
+        Name of output ASDF file.
+    """
+    ref_kw = common_reference_file_keywords("IFUSLICER", "NIRSPEC IFU SLICER description - CDP4")
+    f = fits.open(ifuslicer)
+    tree = ref_kw.copy()
+    data = f[1].data
+    header = f[1].header
+    shiftx = models.Shift(header['XREF'], name='ifu_slicer_xref')
+    shifty = models.Shift(header['YREF'], name='ifu_slicer_yref')
+    rot = models.Rotation2D(header['ROT'], name='ifu_slicer_rot')
+    model = rot | shiftx & shifty
+    tree['model'] = model
+    tree['data'] = f[1].data
+    f.close()
+    fasdf = AsdfFile()
+    fasdf.tree = tree
+    fasdf.write_to(outname)
+    return fasdf
+
+
+def ifupost2asdf(ifupost_files, outname):
+    """
+    Create a reference file of type ``ifupost`` .
+
+    Combines all IDT ``IFU-POST`` reference files in one ASDF file.
+
+    forward direction : MSA to Collimator
+    backward_direction: Collimator to MSA
+
+    Parameters
+    ----------
+    ifupost_files : list
+        Names of all ``IFU-POST`` IDT reference files
+    outname : str
+        Name of output ``ASDF`` file
+    """
+    ref_kw = common_reference_file_keywords("IFUPOST", "NIRSPEC IFU-POST transforms - CDP4")
+    fa = AsdfFile()
+    fa.tree = ref_kw
+    for fifu in ifupost_files:
+        n = int((fifu.split('IFU-POST_')[1]).split('.pcf')[0])
+        fa.tree[n] = {}
+        with open(fifu) as f:
+            lines = [l.strip() for l in f.readlines()]
+        factors = lines[lines.index('*Factor 2') + 1].split()
+        rotation_angle = float(lines[lines.index('*Rotation') + 1])
+        input_rot_center = lines[lines.index('*InputRotationCentre 2') + 1].split()
+        output_rot_center = lines[lines.index('*OutputRotationCentre 2') + 1].split()
+        linear_sky2det = homothetic_sky2det(input_rot_center, rotation_angle, factors, output_rot_center)
+
+        degree = int(lines[lines.index('*FitOrder') + 1])
+
+        xcoeff_index = lines.index('*xForwardCoefficients 21 2')
+        xlines = lines[xcoeff_index + 1: xcoeff_index + 22]
+        xcoeff_forward = coeffs_from_pcf(degree, xlines)
+        x_poly_forward = models.Polynomial2D(degree, name='x_poly_forward', **xcoeff_forward)
+
+        ycoeff_index = lines.index('*yForwardCoefficients 21 2')
+        ycoeff_forward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
+        y_poly_forward = models.Polynomial2D(degree, name='y_poly_forward', **ycoeff_forward)
+
+        xcoeff_index = lines.index('*xBackwardCoefficients 21 2')
+        xcoeff_backward = coeffs_from_pcf(degree, lines[xcoeff_index + 1: xcoeff_index + 22])
+        x_poly_backward = models.Polynomial2D(degree, name='x_poly_backward', **xcoeff_backward)
+
+        ycoeff_index = lines.index('*yBackwardCoefficients 21 2')
+        ycoeff_backward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
+        y_poly_backward = models.Polynomial2D(degree, name='y_poly_backward', **ycoeff_backward)
+
+        output2poly_mapping = Identity(2, name='output_mapping')
+        output2poly_mapping.inverse = Mapping([0, 1, 0, 1])
+        input2poly_mapping = Mapping([0, 1, 0, 1], name='input_mapping')
+        input2poly_mapping.inverse = Identity(2)
+
+        model_poly = input2poly_mapping | (x_poly_forward & y_poly_forward) | output2poly_mapping
+
+        model = linear_sky2det | model_poly
+        fa.tree[n]['model'] = model
+    asdffile = fa.write_to(outname)
+    return asdffile
 
 
 ref_files = "/internal/1/astropy/embray-compound-mdboom-gwcs3/models/nirspec-model-2014"
