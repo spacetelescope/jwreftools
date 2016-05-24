@@ -15,6 +15,7 @@ from __future__ import (absolute_import, unicode_literals, division,
                         print_function)
 import glob
 import os.path
+
 import numpy as np
 from astropy.io import fits
 from asdf import AsdfFile
@@ -615,7 +616,7 @@ def fpa2asdf(fpafile, outname, ref_kw):
     ind = lines.index("*SCA491_PitchY")
     nrs1_pitchy = float(lines[ind+1])
     ind = lines.index("*SCA491_RotAngle")
-    nrs1_angle = np.rad2deg(float(lines[ind+1]))
+    nrs1_angle = float(lines[ind+1])
     ind = lines.index("*SCA491_PosX")
     nrs1_posx = float(lines[ind+1])
     ind = lines.index("*SCA491_PosY")
@@ -627,31 +628,52 @@ def fpa2asdf(fpafile, outname, ref_kw):
     ind = lines.index("*SCA492_PitchY")
     nrs2_pitchy = float(lines[ind+1])
     ind = lines.index("*SCA492_RotAngle")
-    nrs2_angle = np.rad2deg(float(lines[ind+1]))
+    nrs2_angle = float(lines[ind+1])
     ind = lines.index("*SCA492_PosX")
     nrs2_posx = float(lines[ind+1])
     ind = lines.index("*SCA492_PosY")
     nrs2_posy = float(lines[ind+1])
 
     tree = ref_kw.copy()
-    nrs1_sky2det = models.Shift(-nrs1_posx) & models.Shift(-nrs1_posy) | \
-                 models.Rotation2D(-nrs1_angle) | \
-                 models.Scale(1/nrs1_pitchx) & models.Scale(1/nrs1_pitchy)
-    nrs1_det2sky = models.Rotation2D(nrs1_angle) | \
-                 models.Scale(nrs1_pitchx) & models.Scale(nrs1_pitchy) | \
-                 models.Shift(nrs1_posx) & models.Shift(nrs1_posy)
+
+    # NRS1 Sky to Detector
+    scaling = np.array([[1/nrs1_pitchx, 0], [0, 1/nrs1_pitchy]])
+    rotmat = models.Rotation2D._compute_matrix(-nrs1_angle)
+    matrix = np.dot(rotmat, scaling)
+    aff = models.AffineTransformation2D(matrix, name='fpa_affine_sky2detector')
+    nrs1_sky2det = models.Shift(-nrs1_posx, name='fpa_shift_x') & \
+                 models.Shift(-nrs1_posy, name='fpa_shift_y') | aff
+
+    # NRS1 Detector to Sky
+    rotmat = models.Rotation2D._compute_matrix(-nrs1_angle)
+    scaling = np.array([[nrs1_pitchx, 0], [0, nrs1_pitchy]])
+    matrix = np.dot(rotmat, scaling)
+    aff = models.AffineTransformation2D(matrix, name='fpa_affine_detector2sky')
+    nrs1_det2sky = aff | models.Shift(nrs1_posx, name='fpa_shift_x_det2sky') & \
+                 models.Shift(nrs1_posy, name='fpa_shift_y_det2sky')
+
     nrs1_det2sky.inverse = nrs1_sky2det
 
-    nrs2_sky2det = models.Shift(-nrs2_posx) & models.Shift(-nrs2_posy) | \
-                 models.Rotation2D(-nrs2_angle) | \
-                 models.Scale(1/nrs2_pitchx) & models.Scale(1/nrs2_pitchy)
-    nrs2_det2sky = models.Rotation2D(nrs2_angle) | \
-                 models.Scale(nrs2_pitchx) & models.Scale(nrs2_pitchy) | \
-                 models.Shift(nrs2_posx) & models.Shift(nrs2_posy)
-    nrs2_det2sky.inverse = nrs1_sky2det
+    # NRS2 Sky to Detector
+    scaling = np.array([[-1/nrs2_pitchx, 0], [0, -1/nrs2_pitchy]])
+    rotmat = models.Rotation2D._compute_matrix(-nrs2_angle)
+    matrix = np.dot(rotmat, scaling)
+    aff = models.AffineTransformation2D(matrix, name='fpa_affine_sky2detector')
+    nrs2_sky2det = models.Shift(-nrs2_posx, name='fpa_shixft_x') & \
+                 models.Shift(-nrs2_posy, name='fpa_shift_y') | aff
+
+    # NRS2 Detector to Sky
+    rotmat = models.Rotation2D._compute_matrix(nrs2_angle)
+    scaling = np.array([[-nrs2_pitchx, 0], [0, -nrs2_pitchy]])
+    matrix = np.dot(rotmat, scaling)
+    aff = models.AffineTransformation2D(matrix, name='fpa_affine_detector2sky')
+    nrs2_det2sky = aff | models.Shift(nrs2_posx, name='fpa_shift_x_det2sky') & \
+                 models.Shift(nrs2_posy, name='fpa_shift_y_det2sky')
+
+    nrs2_det2sky.inverse = nrs2_sky2det
 
     tree['NRS1'] = nrs1_det2sky
-    tree['NRS2'] = nrs2_sky2det
+    tree['NRS2'] = nrs2_det2sky
     fasdf = AsdfFile()
     fasdf.tree = tree
     fasdf.add_history_entry("Build 6")
