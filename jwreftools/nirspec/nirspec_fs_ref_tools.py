@@ -412,84 +412,74 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
     disperser = disfile.split('.dis')[0].split('_')[1]
     with open(disfile) as f:
         lines=[l.strip() for l in f.readlines()]
-    d = dict.fromkeys(['groove_density', 'theta_z', 'theta_y', 'theta_x', 'tilt_y'])
+
+    try:
+        ind = lines.index('*TYPE')
+        disperser_type = (lines[ind + 1]).lower()
+    except ValueError:
+        raise ValueError("Unknown disperser type in {0}".format(disfile))
+
+    if disperser_type == 'gratingdata':
+        d = dict.fromkeys(['groove_density', 'theta_z', 'theta_y', 'theta_x', 'tilt_y'])
+    elif disperser_type == 'prismdata':
+        d = dict.fromkeys(['tref', 'pref', 'angle', 'coefformula', 'thermalcoef', 'wbound'
+                           'theta_z', 'theta_y', 'theta_x', 'tilt_y'])
+
     d.update(ref_kw)
-    for line in lines:
+    try:
         ind = lines.index('*GRATINGNAME')
         grating_name = lines[ind + 1]
+    except ValueError:
+        grating_name = 'PRISM'
+
+    #for line in lines:
+    ind = lines.index('*THETAZ')
+    d['theta_z'] = float(lines[ind + 1]) / 3600. # in degrees
+    ind = lines.index('*THETAX')
+    d['theta_x'] = float(lines[ind + 1]) / 3600. # in degrees
+    ind = lines.index('*THETAY')
+    d['theta_y'] = float(lines[ind + 1]) / 3600. # in degrees
+    ind = lines.index('*TILTY')
+    d['tilt_y'] = float(lines[ind + 1]) # in degrees
+    try:
+        ind = lines.index('*TILTX')
+        d['tilt_x'] = float(lines[ind + 1]) # in degrees
+    except ValueError:
+        d['tilt_x'] = 0.0
+
+    if disperser_type == 'gratingdata':
         ind = lines.index('*GROOVEDENSITY')
         d['groove_density'] = float(lines[ind + 1])
-        ind = lines.index('*THETAZ')
-        d['theta_z'] = float(lines[ind + 1]) / 3600. # in degrees
-        ind = lines.index('*THETAX')
-        d['theta_x'] = float(lines[ind + 1]) / 3600. # in degrees
-        ind = lines.index('*THETAY')
-        d['theta_y'] = float(lines[ind + 1]) / 3600. # in degrees
-        ind = lines.index('*TILTY')
-        d['tilt_y'] = float(lines[ind + 1]) # in degrees
-        try:
-            ind = lines.index('*TILTX')
-            d['tilt_x'] = float(lines[ind + 1]) # in degrees
-        except ValueError:
-            d['tilt_x'] = 0.0
+    elif disperser_type == 'prismdata':
+        ind = lines.index('*ANGLE')
+        d['angle'] = float(lines[ind + 1]) # in degrees
 
+        ind = lines.index('*TREF')
+        d['tref'] = float(lines[ind + 1]) # Temperature in K
+
+        ind = lines.index('*PREF')
+        d['pref'] = float(lines[ind + 1]) # Pressure in ATM
+
+        ind = lines.index('*COEFFORMULA')
+        coefs = np.array(lines[ind : ind+int(l[-1])], dtype=np.float)
+        kcoef = coefs[::2]
+        lcoef = coefs[1::2]
+        d['lcoef'] = lcoef
+        d['kcoef'] = kcoef
+
+        # 6 coeffs - D0, D1, D2, E0, E1, lambdak
+        ind = lines.index('*THERMALCOEF')
+        coefs = lines[ind : ind+int(l[-1])]
+        d['tcoef'] = [float(c) for c in coefs]
+
+        ind = lines.index('*WBOUND')
+        coefs = lines[ind : ind + 2]
+        d['wbound'] = [float(c) for c in coefs]
 
     assert grating_name in tiltyfile
     assert grating_name in tiltxfile
-
-    with open(tiltyfile) as f:
-        s = f.read()
-    tiltyd = {}
-    vals = s.split('*')
-    for line in vals[::-1]:
-        if line.startswith("CoeffsTemperature00"):
-            l = line.split('\n')
-            n = int(l[0].split()[1])
-            coeffs = {}
-            for i , c in enumerate([float(c) for c in l[1:1+n]]):
-                coeffs['c' + str(i)] = c
-            tiltyd['tilt_model'] = models.Polynomial1D(n-1, **coeffs)
-        elif line.startswith("Temperatures"):
-            l = line.split('\n')
-            n = int(l[0].split()[1])
-            coeffs = l[1:1+n]
-            tiltyd['temperatures'] = [float(c) for c in coeffs]
-        elif line.startswith("Zeroreadings"):
-            l = line.split('\n')
-            n = int(l[0].split()[1])
-            coeffs = l[1:1+n]
-            tiltyd['zeroreadings'] = [float(c) for c in coeffs]
-        elif line.startswith("Unit"):
-            tiltyd['unit'] = line.split('\n')[1]
-
-    with open(tiltxfile) as f:
-        s = f.read()
-    tiltxd = {}
-    vals = s.split('*')
-    for line in vals[::-1]:
-        if line.startswith("CoeffsTemperature00"):
-            l = line.split('\n')
-            n = int(l[0].split()[1])
-            coeffs = {}
-            for i , c in enumerate([float(c) for c in l[1:1+n]]):
-                coeffs['c' + str(i)] = c
-            tiltxd['tilt_model'] = models.Polynomial1D(n-1, **coeffs)
-        elif line.startswith("Temperatures"):
-            l = line.split('\n')
-            n = int(l[0].split()[1])
-            coeffs = l[1:1+n]
-            tiltxd['temperatures'] = [float(c) for c in coeffs]
-        elif line.startswith("Zeroreadings"):
-            l = line.split('\n')
-            n = int(l[0].split()[1])
-            coeffs = l[1:1+n]
-            tiltxd['zeroreadings'] = [float(c) for c in coeffs]
-        elif line.startswith("Unit"):
-            tiltxd['unit'] = line.split('\n')[1]
-
-        """
-        TODO: add prism specific coefficients, get_disperser_info.pro
-        """
+    tiltyd = disperser_tilt(tiltyfile)
+    tiltxd = disperser_tilt(tiltxfile)
 
     d['gwa_tiltx'] = tiltyd
     d['gwa_tilty'] = tiltxd
@@ -498,6 +488,34 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
     fasdf.add_history_entry("Build 6")
     fasdf.write_to(outname)
     return fasdf
+
+
+def disperser_tilt(tiltfile):
+    with open(tiltfile) as f:
+        s = f.read()
+    tilt_d = {}
+    vals = s.split('*')
+    for line in vals[::-1]:
+        if line.startswith("CoeffsTemperature00"):
+            l = line.split('\n')
+            n = int(l[0].split()[1])
+            coeffs = {}
+            for i , c in enumerate([float(c) for c in l[1:1+n]]):
+                coeffs['c' + str(i)] = c
+            tilt_d['tilt_model'] = models.Polynomial1D(n-1, **coeffs)
+        elif line.startswith("Temperatures"):
+            l = line.split('\n')
+            n = int(l[0].split()[1])
+            coeffs = l[1:1+n]
+            tilt_d['temperatures'] = [float(c) for c in coeffs]
+        elif line.startswith("Zeroreadings"):
+            l = line.split('\n')
+            n = int(l[0].split()[1])
+            coeffs = l[1:1+n]
+            tilt_d['zeroreadings'] = [float(c) for c in coeffs]
+        elif line.startswith("Unit"):
+            tilt_d['unit'] = line.split('\n')[1]
+    return tilt_d
 
 
 def wavelength_range(spectral_conf, outname, ref_kw):
