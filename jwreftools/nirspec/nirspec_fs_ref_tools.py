@@ -500,7 +500,8 @@ def disperser_tilt(tiltfile):
             l = line.split('\n')
             n = int(l[0].split()[1])
             coeffs = {}
-            for i , c in enumerate([float(c) for c in l[1:1+n]]):
+            idt_coef = [float(c) for c in l[1 : 1+n]]
+            for i , c in enumerate(idt_coef[::-1]):
                 coeffs['c' + str(i)] = c
             tilt_d['tilt_model'] = models.Polynomial1D(n-1, **coeffs)
         elif line.startswith("Temperatures"):
