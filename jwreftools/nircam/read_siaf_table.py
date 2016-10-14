@@ -2,7 +2,7 @@ import numpy as np
 from astropy.io import ascii
 from astropy.modeling import models
 
-t = ascii.read("2015 01 27 transform info.CSV")
+t = ascii.read("NIRCam_SIAF_2016-09-29.csv")
 definitions = t.Row.as_void(t[4])
 
 """
