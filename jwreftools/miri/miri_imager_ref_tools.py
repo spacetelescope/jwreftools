@@ -167,7 +167,7 @@ def create_miri_imager_distortion(distfile, outname):
     poly2t_mapping = models.Mapping([0, 1, 0, 1])
     poly2t_mapping.inverse = models.Mapping([0, 1, 0, 1])
 
-    distortion_transform = m_transform | mapping | poly | poly2t_mapping | t_transform | ident
+    distortion_transform = m_transform | mapping | poly | poly2t_mapping | t_transform | ident | models.Mapping([1,0])
 
     fdist.close()
     f = AsdfFile()
@@ -228,15 +228,15 @@ def test_transform(asdf_file):
 
     xy, v2, v3 values are from technical report with CDP-3 delivery
     """
-    v2 = np.array([-2, -2, -2, -2, -1.5, -1.5, -1.5, -1.5, -1, -1, -1, -1], dtype=np.float)
-    v3 = np.array([-8, -7.5, -7, -6.5, -8, -7.5, -7, -6.5, -8, -7.5, -7, -6.5], dtype=np.float)
+    v2 = np.array([-8, -7.5, -7, -6.5, -8, -7.5, -7, -6.5, -8, -7.5, -7, -6.5], dtype=np.float)
+    v3 = np.array([-2, -2, -2, -2, -1.5, -1.5, -1.5, -1.5, -1, -1, -1, -1], dtype=np.float)
     xy = np.array([[945.80, 728.45], [676.57, 748.63], [408.29, 768.69], [138.02, 789.09],
                    [924.30, 456.59],[655.18, 477.89], [387.05, 498.99], [116.92, 519.96],
                    [904.31, 185.02], [635.09, 207.37], [366.53, 229.45], [95.58, 250.95]],
                   dtype=np.float)
 
     f = AsdfFile.open(asdf_file)
-    transform = f.tree['distortion']
+    transform = f.tree['model']
     x, y = transform.inverse(v2, v3)
     assert_allclose(x, xy[:,0], atol=.05)
     assert_allclose(y, xy[:,1], atol=.05)
