@@ -1,7 +1,7 @@
 from astropy.modeling import models
 from astropy.modeling.models import Mapping, Identity
 from asdf import AsdfFile
-from .utils import (common__reference_file_keywords, coeffs_from_pcf,
+from .utils import (common_reference_file_keywords, coeffs_from_pcf,
                     homothetic_sky2det)
 
 
@@ -80,7 +80,7 @@ if __name__ == '__main__':
                                             description="Cold design IFU transform, cout x+y fitted with FF/Argon/IMA exposures.",
                                             exp_type="NRS_IFU", useafter=useafter, author=author,
                                             filename=ifupost_name)
- 
+
 
     if isinstance(res.ifu_post_list, str):
         ifupost_refname = glob.glob(res.ifu_post_list + '/IFU-POST*')
