@@ -83,7 +83,8 @@ def create_nircam_distortion(detector, aperture, outname):
             "channel": channel,
             "subarray": aperture,
             "exp_type": "NRC_IMAGE",
-            "useafter": "2014-01-01",
+            "description": "Distortion model from SIAF coefficients."
+            "useafter": "2014-01-01T00:00:00",
             "model": model
             }
 
