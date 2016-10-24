@@ -1,43 +1,47 @@
 import numpy as np
 from astropy.io import ascii
 from astropy.modeling import models
+import sys
 
-t = ascii.read("NIRCam_SIAF_2016-09-29.csv")
-definitions = t.Row.as_void(t[4])
+t = ascii.read("NIRCam_SIAF_2016-09-29.csv",header_start=1)
+#definitions = t.Row.as_void(t[4])
 
 """
 Based on SIAF transforms PATHS
 
 NIRCAM
 ------
+science --> ideal --> V2,V3
+V2,V3 --> ideal --> science
 
-NIRCAMALW_1 - NIRCAMALW
-NIRCAMBLW_1 - NIRCAMBLW
+
 """
 
-def get_siaf_transform(fromsys, tosys, a_degree, b_degree):
+def get_siaf_transform(aperture, from_system, to_system, degree):
     """
     This reads in the file with transformations that the TEL team
     is using to construct the SIAF file. These transformations are
-    defined as teo polynomials (A in x, and B in y) transforming coordinates
+    defined as two polynomials (one in x, and one in y) transforming coordinates
     from one coordinate system to another.
 
     Parameters
     ----------
-    fromsys : str
-        Starting system
-    tosys : str
-        Ending coordinate system
-    a_degree : int
-        Degree of A polynomial
-    b_degree : int
-        Degree of B polynomial
+    aperture: str
+        Name of aperture on NIRCam, composed of the detector name followed
+        by an underscore and the subarray name. (e.g. "NRCA1_FULL", 
+        "NRCB5_SUB160")
+    from_system : str
+        Starting system (e.g. "science", "ideal")
+    to_system : str
+        Ending coordinate system (e.g. "science" , "ideal")
+    degree : int
+        Degree of polynomial
 
     Returns
     -------
-    a_model : astropy.modeling.Model
+    x_model : astropy.modeling.Model
         Correction in x
-    b_model : astropy.modeling.Model
+    y_model : astropy.modeling.Model
         Correction in y
     from_units : str
         Units in the starting system
@@ -46,27 +50,54 @@ def get_siaf_transform(fromsys, tosys, a_degree, b_degree):
 
     Examples
     --------
-    >>> get_siaf_transform('NIRCAMALW', "OTESKY", 5, 5)
+    >>> get_siaf_transform('NRCA1_FULL', "science", "ideal", 5)
 
     """
-    index = -1
-    col2 = t.columns['col2'].tolist()
-    col3 = t.columns['col3'].tolist()
-    for i, s in enumerate(zip(col2, col3)):
-        if s[0] == fromsys and s[1] == tosys:
-            index = i
-    if index < 0:
-        raise ValueError("Did not find row in CSV table fomr: {0} to {1}".format(fromsys, tosys))
-    row = t.Row.as_void(t[index]).tolist()
-    from_units = row[3]
-    to_units = row[4]
-    a_indices = np.array([c.startswith('A') for c in definitions]).nonzero()[0]
-    b_indices = np.array([c.startswith('B') for c in definitions]).nonzero()[0]
-    a_coeff = np.asarray(row[a_indices[0] : a_indices[-1] + 1], dtype=np.float)
-    b_coeff = np.asarray(row[b_indices[0] : b_indices[-1] + 1], dtype=np.float)
-    a_model = to_model(a_coeff, a_degree)
-    b_model = to_model(b_coeff, b_degree)
-    return a_model, b_model, from_units, to_units
+
+    #from_system and to_system are very limited. Can only be "ideal" for the 
+    #distortion-free coords, and "science" for distorted coords
+    from_system = from_system.lower()
+    if from_system not in ['ideal','science']:
+        print("Requested from_system of {} not recognized.".format(from_system))
+        sys.exit()
+
+    to_system = to_system.lower()
+    if to_system not in ['ideal','science']:
+        print("Requested to_system of {} not recognized.".format(to_system))
+        sys.exit()
+
+    #Generate the string corresponding to the requested coefficient labels 
+    if from_system == 'ideal' and to_system == 'science':
+        label = 'Idl2Sci'
+        from_units = 'arcsec'
+        to_units = 'distorted pixels'
+    elif from_system == 'science' and to_system == 'ideal':
+        label = 'Sci2Idl'
+        from_units = 'distorted pixels'
+        to_units = 'arcsec'
+
+    #Find the row that matches the requested aperture
+    match = t['AperName'] == aperture
+    if np.any(match) == False:
+        print("Aperture name {} not found in input CSV file.".format(aperture))
+        sys.exit()
+
+    row = t[match]
+
+    #Get the coefficients for "science" to "ideal" transformation (and back)
+    #"science" is distorted pixels. "ideal" is undistorted arcsec from the 
+    #the reference pixel location. 
+
+    #Then create the model for the transformation
+    X_cols = [c for c in row.colnames if label+'X' in c]
+    x_coeffs = row[X_cols]
+    X_model = to_model(x_coeffs,degree)
+
+    Y_cols = [c for c in row.colnames if label+'Y' in c]
+    y_coeffs = row[Y_cols]
+    Y_model = to_model(y_coeffs,degree)
+
+    return X_model, Y_model, from_units, to_units
 
 
 def to_model(coeffs, degree=5):
@@ -76,7 +107,7 @@ def to_model(coeffs, degree=5):
     Parameters
     ----------
     coeffs : array like
-        Coefficients in the same order as in the ISIM transformations file.
+        Coefficients from the ISIM transformations file.
     degree : int
         Degree of polynomial.
         Default is 5 as in the ISIM file but many of the polynomials are of
@@ -87,15 +118,77 @@ def to_model(coeffs, degree=5):
     poly : astropy.modeling.Polynomial2D
         Polynomial model transforming one coordinate (x or y) between two systems.
     """
-    c = {}
-    names = []
-    for i in range(5):
-        for j in range(5):
-            if i+j < degree+1:
-                names.append('c{0}_{1}'.format(i, j))
 
-    for name, coe in zip(names, coeffs):
-        c[name] = coe
+    #map Colin's coefficients into the order expected by Polynomial2D
+    c = {}
+    for cname in coeffs.colnames:
+        siaf_i = int(cname[-2])
+        siaf_j = int(cname[-1])
+        name = 'c{0}_{1}'.format(siaf_i-siaf_j,siaf_j)
+        c[name] = coeffs[cname]
+
+    #0,0 coefficient should not be used, according to Colin's TR
+    #JWST-STScI-001550
+    c['c0_0'] = 0
+
     return models.Polynomial2D(degree, **c)
 
-#amodel, bmodel, startunit, endunit = read_siaf_table.get_siaf_transform('NIRCAMALW_1', 'NIRCAMALW', 1, 1)
+
+
+def get_siaf_v2v3_transform(aperture,from_system='v2v3',to_system='v2v3'):
+    """
+    Generate transformation model to go to/from V2/V3 from 
+    undistorted angular distnaces from the reference pixel ("ideal")
+    """
+    from_system = from_system.lower()
+    to_system = to_system.lower()
+
+    if from_system != 'v2v3' and to_system != 'v2v3':
+        print("WARNING, either from_system or to_system must be 'v2v3'")
+        sys.exit()    
+
+    #Find the row that matches the requested aperture
+    match = t['AperName'] == aperture
+    if np.any(match) == False:
+        print("Aperture name {} not found in input CSV file.".format(aperture))
+        sys.exit()
+
+    row = t[match]
+
+    #Then create the model for the transformation
+    parity = row['VIdlParity']
+    v3_ideal_y_angle = row['V3IdlYAngle']
+    
+    X_model, Y_model = v2v3_model(from_system,to_system,parity,v3_ideal_y_angle)
+
+    return X_model, Y_model
+
+
+def v2v3_model(from_sys, to_sys, par, angle):
+    """
+    Creates an astropy.modeling.Model object
+    for the undistorted ("ideal") to V2V3 coordinate translation
+    """
+    if from_sys != 'v2v3' and to_sys != 'v2v3':
+        print("This function is designed to generate the transformation either to or from V2V3.")
+        sys.exit()
+
+    #cast the transform functions as 1st order polynomials
+    xc = {}
+    yc = {}
+    if to_sys == 'v2v3':
+        xc['c1_0'] = par * np.cos(angle)
+        xc['c0_1'] = np.sin(angle)
+        yc['c1_0'] = (0.-par) * np.sin(angle)
+        yc['c0_1'] = np.cos(angle)
+
+    if from_sys == 'v2v3':
+        xc['c1_0'] = par * np.cos(angle)
+        xc['c0_1'] = 0. - np.sin(angle)
+        yc['c1_0'] = np.sin(angle)
+        yc['c0_1'] = np.cos(angle)
+        
+    xmodel = models.Polynomial2D(1, **xc)
+    ymodel = models.Polynomial2D(1, **yc)
+
+    return xmodel, ymodel
