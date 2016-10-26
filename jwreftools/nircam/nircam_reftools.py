@@ -25,7 +25,7 @@ in units of arcseconds from the refrence pixel.
 from asdf import AsdfFile
 from astropy.modeling.models import Mapping
 
-import my_read_siaf_table
+import read_siaf_table
 
 def create_nircam_distortion(detector, aperture, outname):
     """
@@ -40,7 +40,7 @@ def create_nircam_distortion(detector, aperture, outname):
     ----------
     detector : str
         NRCB1, NRCB2, NRCB3, NRCB4, NRCB5, NRCA1, NRCA2, NRCA3, NRCA4, NRCA5
-        (NRCA5 and NRCB5 are the LW detectors) or simply NRCA and NRCB
+        (NRCA5 and NRCB5 are the LW detectors) 
     aperture : str
         Name of the aperture/subarray. (e.g. FULL, SUB160, SUB320, SUB640, GRISM_F322W2)
     outname : str
@@ -60,12 +60,12 @@ def create_nircam_distortion(detector, aperture, outname):
 
 
     #"Forward' transformations. science --> ideal --> V2V3
-    sci2idlx, sci2idly, sciunit, idlunit = my_read_siaf_table.get_siaf_transform(full_aperture,'science','ideal', 5)
-    idl2v2v3x, idl2v2v3y = my_read_siaf_table.get_siaf_v2v3_transform(full_aperture,from_system='ideal')
+    sci2idlx, sci2idly, sciunit, idlunit = read_siaf_table.get_siaf_transform(full_aperture,'science','ideal', 5)
+    idl2v2v3x, idl2v2v3y = read_siaf_table.get_siaf_v2v3_transform(full_aperture,from_system='ideal')
 
     #'Reverse' transformations. V2V3 --> ideal --> science
-    v2v32idlx, v2v32idly = my_read_siaf_table.get_siaf_v2v3_transform(full_aperture,to_system='ideal')
-    idl2scix, idl2sciy, idlunit, sciunit = my_read_siaf_table.get_siaf_transform(full_aperture,'ideal','science', 5)
+    v2v32idlx, v2v32idly = read_siaf_table.get_siaf_v2v3_transform(full_aperture,to_system='ideal')
+    idl2scix, idl2sciy, idlunit, sciunit = read_siaf_table.get_siaf_transform(full_aperture,'ideal','science', 5)
     
  
     #Map the models together to make a single transformation
@@ -82,8 +82,8 @@ def create_nircam_distortion(detector, aperture, outname):
             "module": module,
             "channel": channel,
             "subarray": aperture,
+            "description": "Distortion model function created from SIAF coefficients",
             "exp_type": "NRC_IMAGE",
-            "description": "Distortion model from SIAF coefficients."
             "useafter": "2014-01-01T00:00:00",
             "model": model
             }
