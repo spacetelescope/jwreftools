@@ -4,7 +4,6 @@ from astropy.modeling import models
 import sys
 
 t = ascii.read("NIRCam_SIAF_2016-09-29.csv",header_start=1)
-#definitions = t.Row.as_void(t[4])
 
 """
 Based on SIAF transforms PATHS
@@ -125,7 +124,7 @@ def to_model(coeffs, degree=5):
         siaf_i = int(cname[-2])
         siaf_j = int(cname[-1])
         name = 'c{0}_{1}'.format(siaf_i-siaf_j,siaf_j)
-        c[name] = coeffs[cname]
+        c[name] = coeffs[cname].data[0]
 
     #0,0 coefficient should not be used, according to Colin's TR
     #JWST-STScI-001550
@@ -156,8 +155,8 @@ def get_siaf_v2v3_transform(aperture,from_system='v2v3',to_system='v2v3'):
     row = t[match]
 
     #Then create the model for the transformation
-    parity = row['VIdlParity']
-    v3_ideal_y_angle = row['V3IdlYAngle']
+    parity = row['VIdlParity'].data[0]
+    v3_ideal_y_angle = row['V3IdlYAngle'].data[0]
     
     X_model, Y_model = v2v3_model(from_system,to_system,parity,v3_ideal_y_angle)
 
@@ -184,10 +183,14 @@ def v2v3_model(from_sys, to_sys, par, angle):
 
     if from_sys == 'v2v3':
         xc['c1_0'] = par * np.cos(angle)
-        xc['c0_1'] = 0. - np.sin(angle)
+        xc['c0_1'] = par * (0. - np.sin(angle))
         yc['c1_0'] = np.sin(angle)
         yc['c0_1'] = np.cos(angle)
-        
+
+    #0,0 coeff should never be used.
+    xc['c0_0'] = 0
+    yc['c0_0'] = 0
+    
     xmodel = models.Polynomial2D(1, **xc)
     ymodel = models.Polynomial2D(1, **yc)
 
