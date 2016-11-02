@@ -98,7 +98,7 @@ def create_nircam_distortion(detector, aperture, outname):
     fasdf = AsdfFile()
     fasdf.tree = tree
 
-    sdict = {'name':'nircam_reftools.py','author':'B.Hilbert','homepage':'https://github.com/spacetelescope/jwreftools','version':'2.0'}
+    sdict = {'name':'nircam_reftools.py','author':'B.Hilbert','homepage':'https://github.com/spacetelescope/jwreftools','version':'0.7'}
 
     fasdf.add_history_entry("File created from a file of distortion coefficients, NIRCam_SIAF_2016-09-29.csv, provided by Colin Cox in October 2016. Software used: https://github.com/spacetelescope/jwreftools",software=sdict)
         
