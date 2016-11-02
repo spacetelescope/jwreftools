@@ -52,9 +52,9 @@ def create_nircam_distortion(detector, aperture, outname):
     """
     numdet = detector[-1]
     module = detector[-2]
-    channel = 'SW'
+    channel = 'SHORT'
     if numdet == '5':
-        channel = 'LW'
+        channel = 'LONG'
 
     full_aperture = detector + '_' + aperture
 
@@ -73,21 +73,33 @@ def create_nircam_distortion(detector, aperture, outname):
     model_inv =  Mapping([0, 1, 0, 1]) | v2v32idlx & v2v32idly | Mapping([0, 1, 0, 1]) | idl2scix & idl2sciy
     model.inverse = model_inv
 
-    tree = {"title": "NIRCAM Distortion",
-            "instrument": "NIRCAM",
-            "pedigree": "GROUND",
-            "reftype" : "DISTORTION",
-            "author": "B. Hilbert",
-            "detector": detector,
-            "module": module,
-            "channel": channel,
-            "subarray": aperture,
-            "description": "Distortion model function created from SIAF coefficients",
-            "exp_type": "NRC_IMAGE",
-            "useafter": "2014-01-01T00:00:00",
-            "model": model
+    #In the reference file headers, we need to switch NRCA5 to NRCALONG, and same
+    #for module B.
+    if detector[-1] == '5':
+        detector = detector[0:4] + 'LONG'
+
+    
+    tree = {"TITLE": "NIRCAM Distortion",
+            "TELESCOP": "JWST",
+            "INSTRUMENT": "NIRCAM",
+            "PEDIGREE": "GROUND",
+            "REFTYPE" : "DISTORTION",
+            "AUTHOR": "B. Hilbert",
+            "DETECTOR": detector,
+            "MODULE": module,
+            "CHANNEL": channel,
+            "SUBARRAY": aperture,
+            "DESCRIP": "Distortion model function created from SIAF coefficients",
+            "EXP_TYPE": "NRC_IMAGE",
+            "USEAFTER": "2014-01-01T00:00:00",
+            "model": model,
             }
 
     fasdf = AsdfFile()
     fasdf.tree = tree
+
+    sdict = {'name':'nircam_reftools.py','author':'B.Hilbert','homepage':'https://github.com/spacetelescope/jwreftools','version':'2.0'}
+
+    fasdf.add_history_entry("File created from a file of distortion coefficients, NIRCam_SIAF_2016-09-29.csv, provided by Colin Cox in October 2016. Software used: https://github.com/spacetelescope/jwreftools",software=sdict)
+        
     fasdf.write_to(outname)
