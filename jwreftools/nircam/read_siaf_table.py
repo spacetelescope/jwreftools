@@ -156,7 +156,7 @@ def get_siaf_v2v3_transform(aperture,from_system='v2v3',to_system='v2v3'):
 
     #Then create the model for the transformation
     parity = row['VIdlParity'].data[0]
-    v3_ideal_y_angle = row['V3IdlYAngle'].data[0]
+    v3_ideal_y_angle = row['V3IdlYAngle'].data[0] * np.pi / 180.
     
     X_model, Y_model = v2v3_model(from_system,to_system,parity,v3_ideal_y_angle)
 
