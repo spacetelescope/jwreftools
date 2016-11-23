@@ -3,7 +3,7 @@ from astropy.io import ascii
 from astropy.modeling import models
 import sys
 
-t = ascii.read("NIRCam_SIAF_2016-09-29.csv",header_start=1)
+#t = ascii.read("NIRCam_SIAF_2016-09-29.csv",header_start=1)
 
 """
 Based on SIAF transforms PATHS
@@ -16,7 +16,7 @@ V2,V3 --> ideal --> science
 
 """
 
-def get_siaf_transform(aperture, from_system, to_system, degree):
+def get_siaf_transform(coefffile, aperture, from_system, to_system, degree):
     """
     This reads in the file with transformations that the TEL team
     is using to construct the SIAF file. These transformations are
@@ -52,6 +52,9 @@ def get_siaf_transform(aperture, from_system, to_system, degree):
     >>> get_siaf_transform('NRCA1_FULL', "science", "ideal", 5)
 
     """
+    #read in csv file of coefficients
+    #t = ascii.read("NIRCam_SIAF_2016-09-29.csv",header_start=1)
+    t = ascii.read(coefffile,header_start=1)
 
     #from_system and to_system are very limited. Can only be "ideal" for the 
     #distortion-free coords, and "science" for distorted coords
@@ -134,11 +137,15 @@ def to_model(coeffs, degree=5):
 
 
 
-def get_siaf_v2v3_transform(aperture,from_system='v2v3',to_system='v2v3'):
+def get_siaf_v2v3_transform(coefffile,aperture,from_system='v2v3',to_system='v2v3'):
     """
     Generate transformation model to go to/from V2/V3 from 
     undistorted angular distnaces from the reference pixel ("ideal")
     """
+    #read in csv file of coefficients
+    #t = ascii.read("NIRCam_SIAF_2016-09-29.csv",header_start=1)
+    t = ascii.read(coefffile,header_start=1)
+
     from_system = from_system.lower()
     to_system = to_system.lower()
 
@@ -156,8 +163,10 @@ def get_siaf_v2v3_transform(aperture,from_system='v2v3',to_system='v2v3'):
 
     #Then create the model for the transformation
     parity = row['VIdlParity'].data[0]
-    v3_ideal_y_angle = row['V3IdlYAngle'].data[0]
+    v3_ideal_y_angle = row['V3IdlYAngle'].data[0] * np.pi / 180.
     
+    #print("parity and angle are {}, {}".format(parity,v3_ideal_y_angle))
+
     X_model, Y_model = v2v3_model(from_system,to_system,parity,v3_ideal_y_angle)
 
     return X_model, Y_model
@@ -191,6 +200,12 @@ def v2v3_model(from_sys, to_sys, par, angle):
     xc['c0_0'] = 0
     yc['c0_0'] = 0
     
+
+    #print("coeffs for v2v3 transform:")
+    #for key in xc:
+    #    print("{} {}".format(key,xc[key]))
+    #sys.exit()
+
     xmodel = models.Polynomial2D(1, **xc)
     ymodel = models.Polynomial2D(1, **yc)
 

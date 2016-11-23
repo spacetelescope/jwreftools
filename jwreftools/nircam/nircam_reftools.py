@@ -27,7 +27,7 @@ from astropy.modeling.models import Mapping
 
 import read_siaf_table
 
-def create_nircam_distortion(detector, aperture, outname):
+def create_nircam_distortion(coefffile, detector, aperture, opgsname, outname):
     """
     Create an asdf reference file with all distortion components for the NIRCam imager.
 
@@ -40,7 +40,6 @@ def create_nircam_distortion(detector, aperture, outname):
     ----------
     detector : str
         NRCB1, NRCB2, NRCB3, NRCB4, NRCB5, NRCA1, NRCA2, NRCA3, NRCA4, NRCA5
-        (NRCA5 and NRCB5 are the LW detectors) 
     aperture : str
         Name of the aperture/subarray. (e.g. FULL, SUB160, SUB320, SUB640, GRISM_F322W2)
     outname : str
@@ -52,20 +51,19 @@ def create_nircam_distortion(detector, aperture, outname):
     """
     numdet = detector[-1]
     module = detector[-2]
-    channel = 'SW'
+    channel = 'SHORT'
     if numdet == '5':
-        channel = 'LW'
-
+        channel = 'LONG'
+        
     full_aperture = detector + '_' + aperture
 
-
     #"Forward' transformations. science --> ideal --> V2V3
-    sci2idlx, sci2idly, sciunit, idlunit = read_siaf_table.get_siaf_transform(full_aperture,'science','ideal', 5)
-    idl2v2v3x, idl2v2v3y = read_siaf_table.get_siaf_v2v3_transform(full_aperture,from_system='ideal')
+    sci2idlx, sci2idly, sciunit, idlunit = read_siaf_table.get_siaf_transform(coefffile,full_aperture,'science','ideal', 5)
+    idl2v2v3x, idl2v2v3y = read_siaf_table.get_siaf_v2v3_transform(coefffile,full_aperture,from_system='ideal')
 
     #'Reverse' transformations. V2V3 --> ideal --> science
-    v2v32idlx, v2v32idly = read_siaf_table.get_siaf_v2v3_transform(full_aperture,to_system='ideal')
-    idl2scix, idl2sciy, idlunit, sciunit = read_siaf_table.get_siaf_transform(full_aperture,'ideal','science', 5)
+    v2v32idlx, v2v32idly = read_siaf_table.get_siaf_v2v3_transform(coefffile,full_aperture,to_system='ideal')
+    idl2scix, idl2sciy, idlunit, sciunit = read_siaf_table.get_siaf_transform(coefffile,full_aperture,'ideal','science', 5)
     
  
     #Map the models together to make a single transformation
@@ -73,21 +71,34 @@ def create_nircam_distortion(detector, aperture, outname):
     model_inv =  Mapping([0, 1, 0, 1]) | v2v32idlx & v2v32idly | Mapping([0, 1, 0, 1]) | idl2scix & idl2sciy
     model.inverse = model_inv
 
-    tree = {"title": "NIRCAM Distortion",
-            "instrument": "NIRCAM",
-            "pedigree": "GROUND",
-            "reftype" : "DISTORTION",
-            "author": "B. Hilbert",
-            "detector": detector,
-            "module": module,
-            "channel": channel,
-            "subarray": aperture,
-            "description": "Distortion model function created from SIAF coefficients",
-            "exp_type": "NRC_IMAGE",
-            "useafter": "2014-01-01T00:00:00",
+
+    #In the reference file headers, we need to switch NRCA5 to NRCALONG, and same
+    #for module B.
+    if detector[-1] == '5':
+        detector = detector[0:4] + 'LONG'
+    
+
+    tree = {"TITLE": "NIRCAM Distortion",
+            "TELESCOP": "JWST",
+            "INSTRUMENT": "NIRCAM",
+            "PEDIGREE": "GROUND",
+            "REFTYPE" : "DISTORTION",
+            "AUTHOR": "B. Hilbert",
+            "DETECTOR": detector,
+            "MODULE": module,
+            "CHANNEL": channel,
+            "SUBARRAY": opgsname,
+            "DESCRIP": "Distortion model function created from SIAF coefficients",
+            "EXP_TYPE": "NRC_IMAGE",
+            "USEAFTER": "2014-01-01T00:00:00",
             "model": model
             }
 
     fasdf = AsdfFile()
     fasdf.tree = tree
+
+    sdict = {'name':'nircam_reftools.py','author':'B.Hilbert','homepage':'https://github.com/spacetelescope/jwreftools','version':'0.7'}
+    
+    fasdf.add_history_entry("File created from a file of distortion coefficients, NIRCam_SIAF_2016-09-29.csv, provided by Colin Cox in October 2016. Software used: https://github.com/spacetelescope/jwreftools",software=sdict)
+
     fasdf.write_to(outname)
