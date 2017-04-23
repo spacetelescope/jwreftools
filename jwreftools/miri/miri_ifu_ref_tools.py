@@ -98,18 +98,14 @@ def create_cdp5_references(fname, ref):
     xmodel1.update(xmodel2)
     ymodel1.update(ymodel2)
     lmodel1.update(lmodel2)
-    #bmodel1, smodel1 = create_beta_models(b0_ch1, bdel_ch1, int(channel[0]), len(alpha1))
-    #bmodel2, smodel2 = create_beta_models(b0_ch2, bdel_ch2, int(channel[1]), len(alpha2))
-    #bmodel1.update(bmodel2)
+
     bmodel1 = create_beta_models(b0_ch1, bdel_ch1, int(channel[0]), len(alpha1))
     bmodel2 = create_beta_models(b0_ch2, bdel_ch2, int(channel[1]), len(alpha2))
     bmodel1.update(bmodel2)
     useafter = "2000-01-01T00:00:00"
     author =  'Adrian M. Glauser'  #Author of the data
     description = 'MIRI MRS CDP5 ristortion reference data.'
-    #create_distortion_file(reftype='DISTORTION', detector=detector, band=band, channel=channel,
-                           #data=(amodel1, bmodel1, xmodel1, ymodel1, smodel1, smodel2), name=ref['distortion'],
-                           #author=author, useafter=useafter, description=description)
+
     create_distortion_file(reftype='DISTORTION', detector=detector, band=band, channel=channel,
                            data=(amodel1, bmodel1, xmodel1, ymodel1, bzero, bdel), name=ref['distortion'],
                            author=author, useafter=useafter, description=description)
@@ -310,7 +306,6 @@ def create_distortion_file(reftype, detector,  band, channel, data, name, author
     tree = create_reffile_header(reftype, detector, band, channel, author, useafter,
                                  description)
     tree['filename'] = name
-    #adata, bdata, xdata, ydata, sdata1, sdata2 = data
     adata, bdata, xdata, ydata, bzero, bdel = data
     tree['alpha_model'] = adata
     tree['beta_model'] = bdata
@@ -318,7 +313,7 @@ def create_distortion_file(reftype, detector,  band, channel, data, name, author
     tree['y_model'] = ydata
     tree['bzero'] = bzero
     tree['bdel'] = bdel
-    #tree['slice_model'] = {str(channel[0])+band: sdata1, str(channel[1])+band: sdata2}
+
     f = AsdfFile()
     f.tree = tree
     f.add_history_entry("DOCUMENT: MIRI-TN-00001-ETH; SOFTWARE: polyd2c_CDP5.pro; DATA USED: Data set of: - FM Test Campaign relevant to MRS-OPT-01, MRS-OPT-02, MRS-OPT-04, MRS-OPT-08; - CV1 Test Campaign relevant to MRS-OPT-02; - CV2 Test Campaign relevant to MRS-OPT-02; - Laboratory measurement of SPO; ============ DIFFERENCES: - New file structure: Change of Extention names and Table Column Headers.; - Replaced V2/V3 with XAN/YAN;")
@@ -398,15 +393,12 @@ def build_coeff_names(names):
 
 def create_beta_models(b0, bdel, channel, nslices):
     beta = {}
-    slices = {}
     for s in range(nslices):
         sl = channel * 100 + s +1
         beta_s = b0 + s * bdel
         m = models.Const1D(beta_s, name='det2local') #xy2beta and xy2lam
         beta[sl] = m
-        inv = models.Const1D(sl)
-        slices[beta_s] = models.Mapping([1,]) | inv
-    return beta#, slices
+    return beta
 
 
 def create_wavelengthrange_file(name, detector, author, useafter, description):
