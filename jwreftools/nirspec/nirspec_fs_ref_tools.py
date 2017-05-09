@@ -1112,4 +1112,3 @@ def nirspec_models_to_asdf_build6():
     except:
         print("IFUSLICER file was not created.")
         raise
-
