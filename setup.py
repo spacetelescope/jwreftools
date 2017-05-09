@@ -22,7 +22,12 @@ from astropy_helpers.version_helpers import generate_version_py
 
 # Get some values from the setup.cfg
 from distutils import config
-conf = config.ConfigParser()
+try:
+    conf = config.RawConfigParser()  # python 3.5
+except AttributeError as e:
+    conf = config.ConfigParser()
+    print("import error ({0}): {1}".format(e.errno, e.strerror))
+
 conf.read(['setup.cfg'])
 metadata = dict(conf.items('metadata'))
 
