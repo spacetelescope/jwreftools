@@ -3,6 +3,8 @@ from astropy.modeling import models
 from astropy.modeling.models import Mapping, Identity
 from asdf import AsdfFile
 
+__all__ = ['pcf2model', 'linear_from_pcf_det2sky', 'coeffs_from_pcf']
+
 
 def homothetic_det2sky(input_center, angle, scale, output_center, name=""):
     """
@@ -89,10 +91,9 @@ def linear_from_pcf_det2sky(pcffile):
 
 
 
-def pcf2asdf(pcffile, outname, ref_file_kw):
+def pcf2model(pcffile):#, ref_file_kw):
     """
-    Create an asdf reference file with the transformation coded in a NIRSPEC
-    Camera.pcf or Collimator*.pcf file.
+    Create a model from a NIRSPEC Camera.pcf or Collimator*.pcf file.
 
     - forward (team): sky to detector
       - Shift inputs to input_rotation_center
@@ -123,8 +124,8 @@ def pcf2asdf(pcffile, outname, ref_file_kw):
 
     Returns
     -------
-    fasdf : AsdfFile
-        AsdfFile object
+    fasdf : `~astropy.modeling.core.Model`
+        Model object.
 
     Examples
     --------
@@ -167,11 +168,25 @@ def pcf2asdf(pcffile, outname, ref_file_kw):
 
     model = model_poly | linear_det2sky
 
-    f = AsdfFile()
-    f.tree = ref_file_kw.copy()
-    f.add_history_entry("Build 6")
-    f.tree['model'] = model
-    f.write_to(outname)
+    #f = AsdfFile()
+    #f.tree = ref_file_kw.copy()
+    #f.add_history_entry("Build 6")
+    #f.tree['model'] = model
+    #f.write_to(outname)
+    return model
+
+def coeffs_from_pcf(degree, coeffslist):
+    coeffs = {}
+    k = 0
+    for i in range(degree + 1):
+        for j in range(degree + 1):
+            if i+j < degree+1:
+                name = "c{0}_{1}".format(i, j)
+                coeffs[name] =  float(coeffslist[k])
+                k +=1
+            else:
+                continue
+    return coeffs
 
 
 def common_reference_file_keywords(reftype, title, description, exp_type,

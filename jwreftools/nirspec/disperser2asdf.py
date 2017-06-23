@@ -1,9 +1,14 @@
 import os.path
-from asdf import AsdfFile
-from .utils import common_reference_file_keywords
+import datetime
+from astropy.modeling import models
+
+from .utils import pcf2model#, common_reference_file_keywords)
+from jwst.datamodels import DisperserModel
+from asdf.tags.core import Software, HistoryEntry
 
 
-def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
+
+def disperser2asdf(disfile, tiltyfile, tiltxfile, author, description, useafter):
     """
     Create a NIRSPEC disperser reference file in ASDF format.
 
@@ -43,7 +48,7 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
         d = dict.fromkeys(['tref', 'pref', 'angle', 'lcoef', 'kcoef', 'tcoef', 'wbound'
                            'theta_z', 'theta_y', 'theta_x', 'tilt_y'])
 
-    d.update(ref_kw)
+    #d.update(ref_kw)
     try:
         ind = lines.index('*GRATINGNAME')
         grating_name = lines[ind + 1]
@@ -102,11 +107,29 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, outname, ref_kw):
 
     d['gwa_tiltx'] = tiltyd
     d['gwa_tilty'] = tiltxd
-    fasdf = AsdfFile()
-    fasdf.tree = d
-    fasdf.add_history_entry("Build 6")
-    fasdf.write_to(outname)
-    return fasdf
+
+    disperser_model = DisperserModel()
+    if disperser_type == 'gratingdata':
+        disperser_model.groovedensity = d['groove_density']
+    else:
+        disperser_model.angle = d['angle']
+        disperser_model.kcoef = d['kcoef']
+        disperser_model.lcoef = d['lcoef']
+        disperser_model.tcoef = d['tcoef']
+        disperser_model.pref = d['pref']
+        disperser_model.tref = d['tref']
+
+    disperser_model.gwa_tiltx = d['gwa_tiltx']
+    disperser_model.gwa_tilty = d['gwa_tilty']
+    disperser_model.theta_x = d['theta_x']
+    disperser_model.theta_y = d['theta_y']
+    disperser_model.theta_z = d['theta_z']
+    disperser_model.tilt_x = d['tilt_x']
+    disperser_model.tilt_y = d['tilt_y']
+    disperser_model.wbound = d['wbound']
+    disperser.meta.pgrating = "ANY|N/A|G140M|G140H|G235M|G235H|G395M|G395H|MIRROR|PRISM|"
+    disperser_model.meta.exp_type = "N/A"
+
 
 
 def disperser_tilt(tiltfile):
@@ -142,7 +165,7 @@ if __name__ == '__main__':
     parser = argpars.ArgumentParser(description="Creates NIRSpec 'disperser' reference files in ASDF format.")
     parser.add_argument("disperser_dir", type=str, help="Directory with disperser files.")
     res = parser.parse_args()
-    
+
     for i, grating in enumerate(["G140H", "G140M", "G235H", "G235M", "G395H",
                                  "G395M", "MIRROR", "PRISM"]):
         # disperser refers to the whole reference file, either on disk or asdf

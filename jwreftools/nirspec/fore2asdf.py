@@ -1,27 +1,28 @@
-from asdf import AsdfFile
+#from asdf import AsdfFile
 from astropy.modeling.models import Mapping, Identity
 from astropy.modeling import models
-from .utils import (linear_from_pcf_det2sky, common_reference_file_keywords,
-                    coeffs_from_pcf)
+from .utils import linear_from_pcf_det2sky, coeffs_from_pcf
+
+from jwst.datamodels import FOREModel
 
 
 def slitfore2asdf():
     # fore reference file
     for i, filter in enumerate(["CLEAR", "F070LP", "F100LP", "F110W", "F140X", "F170LP", "F290LP"]):
         fore_name = "nirspec_fore_{0}.asdf".format(filter)
-        ref_kw = common_reference_file_keywords(reftype="fore", title="NIRSPEC FORE Model - CDP4",
-                                                description="FORE transform.",
-                                                exp_type="N/A", useafter=useafter, author=author,
-                                                filename=fore_name)
-        ref_kw['filter'] = filter
+        #ref_kw = common_reference_file_keywords(reftype="fore", title="NIRSPEC FORE Model - CDP4",
+                                                #description="FORE transform.",
+                                                #exp_type="N/A", useafter=useafter, author=author,
+                                                #filename=fore_name)
+        #ref_kw['filter'] = filter
         filename = "Fore_{0}.pcf".format(filter)
         fore_refname = os.path.join(ref_files, "CoordTransform", filename)
-        
+
         try:
             fore2asdf(fore_refname, fore_name, ref_kw)
         except:
             raise Exception(("FORE file was not created - filter {0}".format(filter)))
-            
+
 
 
 def ifufore2asdf():
@@ -35,7 +36,7 @@ def ifufore2asdf():
         raise
 
 
-def fore2asdf(pcffore, outname, ref_kw):
+def fore2asdf(pcffore, author, description, useafter):#outname, ref_kw):
     """
     forward direction : msa 2 ote
     backward_direction: msa 2 fpa
@@ -117,12 +118,18 @@ def fore2asdf(pcffore, outname, ref_kw):
 
     model = (Mapping((0, 1, 2, 0, 1, 2)) | model_poly) | fore_linear
 
-    f = AsdfFile()
-    f.tree = ref_kw.copy()
-    f.tree['model'] = model
-    f.add_history_entry("Build 6")
-    asdffile = f.write_to(outname)
-    return asdffile
+    #f = AsdfFile()
+    #f.tree = ref_kw.copy()
+    #f.tree['model'] = model
+    #f.add_history_entry("Build 6")
+    #asdffile = f.write_to(outname)
+    #return asdffile
+    fore_model = FOREModel()
+    fore_model.model = model
+    fore_model.meta.pedigree = 'GROUND'
+    fore_model.meta.authour = author
+    fore_model.meta.description = description
+    fore_model.meta.useafter = useafter
 
 
 if __name__ == '__main__':
