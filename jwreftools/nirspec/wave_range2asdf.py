@@ -1,8 +1,14 @@
-from asdf import AsdfFile
-from .utils import common_reference_file_keywords
+import datetime
+import numpy as np
+from jwst.datamodels import WavelengthrangeModel
+from astropy import units as u
+from asdf.tags.core import Software, HistoryEntry
 
 
-def wavelength_range(spectral_conf, outname, ref_kw):
+__all__ = ["create_wavelengthrange_reference", "wavelength_range"]
+
+
+def wavelength_range(spectral_conf, author, description, useafter):
     """
     Parameters
     ----------
@@ -13,53 +19,70 @@ def wavelength_range(spectral_conf, outname, ref_kw):
     """
     with open(spectral_conf) as f:
         lines = f.readlines()
-    lines = [l.strip() for l in lines][13 :]
-    lines = [l.split() for l in lines]
-    tree = ref_kw.copy()
-    filter_grating = {}
-    for l in lines:
-        f_g = l[0] + '_' + l[1]
-        filter_grating[f_g] = {'order': int(l[2]), 'range': [float(l[3]), float(l[4])]}
-    tree['filter_grating'] = filter_grating
-    # values in lamp_grating come from private communication with the INS team
-    #lamp_grating = {}
-    filter_grating['FLAT1_G140M'] = {'order': -1, 'range': [1e-6, 1.8e-6]}
-    filter_grating['LINE1_G140M'] = {'order': -1, 'range': [1e-6, 1.8e-6]}
-    filter_grating['FLAT1_G140H'] = {'order': -1, 'range': [1e-6, 1.8e-6]}
-    filter_grating['LINE1_G140H'] = {'order': -1, 'range': [1e-6, 1.8e-6]}
-    filter_grating['FLAT2_G235M'] = {'order': -1, 'range': [1.7e-6, 3.1e-6]}
-    filter_grating['LINE2_G235M'] = {'order': -1, 'range': [1.7e-6, 3.1e-6]}
-    filter_grating['FLAT2_G235H'] = {'order': -1, 'range': [1.7e-6, 3.1e-6]}
-    filter_grating['LINE2_G235H'] = {'order': -1, 'range': [1.7e-6, 3.1e-6]}
-    filter_grating['FLAT3_G395M'] = {'order': -1, 'range': [2.9e-6, 5.3e-6]}
-    filter_grating['LINE3_G395M'] = {'order': -1, 'range': [2.9e-6, 5.3e-6]}
-    filter_grating['FLAT3_G395H'] = {'order': -1, 'range': [2.9e-6, 5.3e-6]}
-    filter_grating['LINE3_G395H'] = {'order': -1, 'range': [2.9e-6, 5.3e-6]}
-    filter_grating['REF_G140M'] = {'order': -1, 'range': [1.3e-6, 1.7e-6]}
-    filter_grating['REF_G140H'] = {'order': -1, 'range': [1.3e-6, 1.7e-6]}
-    filter_grating['TEST_MIRROR'] = {'order': -1, 'range': [0.6e-6, 5.3e-6]}
-    #for grating in ["G140H", "G140M", "G235H", "G235M", "G395H", "G395M", "MIRROR"]:
-        #lamp_grating['FLAT4_{0}'.format(grating)] = {'order': -1, 'range': [0.7e-6, 1.2e-6]}
-    #for grating in ["G140H", "G140M", "G235H", "G235M", "G395H", "G395M", "MIRROR"]:
-        #lamp_grating['LINE4_{0}'.format(grating)] = {'order': -1, 'range': [0.6e-6, 5.3e-6]}
-    #tree['lamp_grating'] = lamp_grating
-    fasdf = AsdfFile()
+    lines = [l.strip() for l in lines]
+    for index, line in enumerate(lines):
+        if 'CONFIGURATIONS' in line:
+            break
+    lines = np.array([l.split() for l in lines[index + 2 :]]).T
+    filt, grat, order, wmin, wmax, samping = lines
+    filter_grating = [f+'_'+g for f, g in zip(filt, grat)]
+    order = [int(i) for i in order]
+    wave_range = [[mini, maxi] for mini, maxi in zip(
+        wmin.astype(np.float), wmax.astype(np.float))]
 
-    fasdf.tree = tree
-    fasdf.add_history_entry("Build 6")
-    fasdf.write_to(outname)
-    return fasdf
+    # in addition
+    addon_list = ['FLAT1_G140H', 'FLAT2_G235H', 'LINE3_G395H', 'REF_G140H',
+                  'REF_G140M', 'FLAT2_G235M', 'LINE1_G140H', 'FLAT3_G395M',
+                  'LINE1_G140M', 'FLAT3_G395H', 'FLAT1_G140M', 'LINE2_G235M',
+                  'LINE3_G395M', 'LINE2_G235H', 'TEST_MIRROR']
 
-if __name__ == '__main__':
-    import argpars
-    parser = argpars.ArgumentParser(description="Creates NIRSpec 'wavelengthrange' reference file in ASDF format.")
-    parser.add_argument("wave_range_file", type=str, help="Spectral configurations file.")
-    parser.add_argument("output_name", type=str, help="Output file name")
-    res = parser.parse_args()
-    if res.output_name is None:
-        output_name = "nirspec_wavelength.asdf"
-    else:
-        output_name = res.output_name
+    filter_grating.extend(addon_list)
+    order.extend([-1] * len(addon_list))
+    wave_range.extend([[1e-06, 1.8e-06], [1.7e-06, 3.1e-06], [2.9e-06, 5.3e-06], [1.3e-06, 1.7e-06],
+                       [1.3e-06, 1.7e-06], [1.7e-06, 3.1e-06], [1e-06, 1.8e-06], [2.9e-06, 5.3e-06],
+                       [1e-06, 1.8e-06], [2.9e-06, 5.3e-06], [1e-06, 1.8e-06], [1.7e-06, 3.1e-06],
+                       [2.9e-06, 5.3e-06], [1.7e-06, 3.1e-06], [6e-07, 5.3e-06]])
 
-    ref_kw = common_reference_file_keywords("WAVELENGTHRANGE", "NIRSPEC Spectral Configurations - CDP4")
-    wavelength_range(wave_range_file, output_name, ref_kw)
+    wr_model = WavelengthrangeModel()
+    wr_model.waverange_selector = filter_grating
+    wr_model.wavelengthrange = wave_range
+    wr_model.order = order
+    wr_model.meta.wavelength_units = u.m
+    wr_model.meta.author = author
+    wr_model.meta.description = description
+    wr_model.meta.useafter = useafter
+    wr_model.meta.pedigree = "GROUND"
+
+    return wr_model
+
+def create_wavelengthrange_reference(wave_range_file, output_name, author=None, description=None, useafter=None):
+    f = open(wave_range_file)
+    lines = [l.strip() for l in f.readlines()]
+    f.close()
+    for i, line in enumerate(lines):
+        if 'AUTHOR' in line:
+            auth = lines[i + 1]
+            continue
+        elif 'DESCRIPTION' in line:
+            descrip = lines[i + 1]
+            continue
+        elif 'DATE' in line:
+            date = lines[i + 1]
+            continue
+
+    if author is None:
+        author = auth
+    if description is None:
+        description = descrip
+    if useafter is None:
+        useafter = date
+
+    wr_model = wavelength_range(wave_range_file, author, description, useafter)
+    entry = HistoryEntry({'description': "New version created from CV3 with updated file structure", 'time': datetime.datetime.utcnow()})
+    software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
+                         'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
+    entry['software'] = software
+    wr_model.history = [entry]
+    wr_model.to_asdf(output_name)
+
+

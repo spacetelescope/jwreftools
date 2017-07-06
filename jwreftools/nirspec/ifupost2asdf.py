@@ -1,11 +1,16 @@
+import datetime
+import os.path, glob
+from asdf.tags.core import Software, HistoryEntry
 from astropy.modeling import models
 from astropy.modeling.models import Mapping, Identity
-from asdf import AsdfFile
+from jwst.datamodels import IFUPostModel
 from .utils import (common_reference_file_keywords, coeffs_from_pcf,
                     homothetic_sky2det)
 
+__all__ = ["create_ifupost_reference", "ifupost2asdf"]
 
-def ifupost2asdf(ifupost_files, outname, ref_kw):
+
+def ifupost2asdf(ifupost_files, author, description, useafter):
     """
     Create a reference file of type ``ifupost`` .
 
@@ -21,11 +26,11 @@ def ifupost2asdf(ifupost_files, outname, ref_kw):
     outname : str
         Name of output ``ASDF`` file
     """
-    fa = AsdfFile()
-    fa.tree = ref_kw
+    ifupost_model = IFUPostModel()
     for fifu in ifupost_files:
-        n = int((fifu.split('IFU-POST_')[1]).split('.pcf')[0])
-        fa.tree[n] = {}
+        fifu_name = os.path.split(fifu)[1]
+        n = int((fifu_name.split('IFU-POST_')[1]).split('.pcf')[0])
+
         with open(fifu) as f:
             lines = [l.strip() for l in f.readlines()]
         factors = lines[lines.index('*Factor 2') + 1].split()
@@ -61,32 +66,64 @@ def ifupost2asdf(ifupost_files, outname, ref_kw):
         model_poly = input2poly_mapping | (x_poly_forward & y_poly_forward) | output2poly_mapping
 
         model = linear_sky2det | model_poly
-        fa.tree[n]['model'] = model
-    fa.add_history_entry("Build 6")
-    asdffile = fa.write_to(outname)
-    return asdffile
-
-if __name__ == '__main__':
-    import argpars
-    parser = argpare.ArgumentParser(description="Creates NIRSpec 'ifupost' reference file in ASDF format.")
-    parser.add_argument("ifupost_file_list", type=(list, str), help="IFUPOST file list or directory with IFUPOST files.")
-    parser.add_argument("output_name", type=str, help="Output file name")
-    res = parser.parse_args()
-    if res.output_name is None:
-        output_name = "nirspec_ifupost.asdf"
-    else:
-        output_name = res.output_name
-    ref_kw = common_reference_file_keywords(reftype="ifupost", title="NIRSPEC IFU-POST transforms - CDP4",
-                                            description="Cold design IFU transform, cout x+y fitted with FF/Argon/IMA exposures.",
-                                            exp_type="NRS_IFU", useafter=useafter, author=author,
-                                            filename=ifupost_name)
+        name = "slice_{0}".format(n)
+        setattr(ifupost_model, name, model)
+    
+    ifupost_model.meta.author = author
+    ifupost_model.meta.description = description
+    ifupost_model.meta.useafter = useafter
+    ifupost_model.meta.pedigree = "GROUND"
+    return ifupost_model
 
 
-    if isinstance(res.ifu_post_list, str):
-        ifupost_refname = glob.glob(res.ifu_post_list + '/IFU-POST*')
-    else:
-        ifupost_refname = res.ifu_post_list
+
+#if __name__ == '__main__':
+#    import argpars
+#    parser = argpare.ArgumentParser(description="Creates NIRSpec 'ifupost' reference file in ASDF format.")
+#    parser.add_argument("ifupost_file_list", type=(list, str), help="IFUPOST file list or directory with IFUPOST files.")
+#    parser.add_argument("output_name", type=str, help="Output file name")
+#    res = parser.parse_args()
+#    if res.output_name is None:
+#        output_name = "nirspec_ifupost.asdf"
+#    else:
+#        output_name = res.output_name
+#    ref_kw = common_reference_file_keywords(reftype="ifupost", title="NIRSPEC IFU-POST transforms - CDP4",
+#                                           description="Cold design IFU transform, cout x+y fitted with FF/Argon/IMA exposures.",
+#                                            exp_type="NRS_IFU", useafter=useafter, author=author,
+#                                            filename=ifupost_name)
+
+def create_ifupost_reference(model_dir, out_name, author=None, description=None, useafter=None):
+    model_dir = os.path.join(model_dir, "CoordTransform", "IFU")
+    ifupost_list = glob.glob(model_dir + '/IFU-POST*')
+    f = open(ifupost_list[0])
+    lines = f.readlines()
+    f.close()
+    lines = [l.strip() for l in lines]
+    for i, line in enumerate(lines):
+        if 'AUTHOR' in line:
+            auth = lines[i + 1]
+            continue
+        elif 'DESCRIPTION' in line:
+            descrip = lines[i + 1]
+            continue
+        elif 'DATE' in line:
+            date = lines[i + 1]
+            continue
+
+    if author is None:
+        author = auth
+    if description is None:
+        description = descrip
+    if useafter is None:
+        useafter = date
+
     try:
-        ifupost2asdf(ifupost_refname, output_name, ref_kw)
+        model = ifupost2asdf(ifupost_list, author, description, useafter)
     except:
         raise Exception("IFUPOST file was not created.")
+    entry = HistoryEntry({'description': "New version created from CV3 with updated file structure", 'time': datetime.datetime.utcnow()})
+    software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
+                         'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
+    entry['software'] = software
+    model.history = [entry]
+    model.to_asdf(out_name)

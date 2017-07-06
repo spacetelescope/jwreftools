@@ -1,14 +1,15 @@
-from asdf import AsdfFile
+import datetime
+from jwst.datamodels import OTEModel
+from asdf.tags.core import Software, HistoryEntry
 from astropy.modeling import models
-from astropy.modeling.momdels import Mapping, Identity
-from .utils import homothetic_det2sky, common_reference_file_keywords
+from astropy.modeling.models import Mapping, Identity
+from .utils import homothetic_det2sky, coeffs_from_pcf
+
+__all__ = ["create_ote_reference", "ote2asdf"]
 
 
-def ote2asdf(otepcf, outname, ref_kw):
+def ote2asdf(otepcf, author, description, useafter):
     """
-    ref_kw = common_reference_file_keywords('OTE', 'NIRSPEC OTE transform - CDP4')
-
-    ote2asdf('Model/Ref_Files/CoordTransform/OTE.pcf', 'jwst_nirspec_ote_0001.asdf', ref_kw)
     """
     with open(otepcf) as f:
         lines = [l.strip() for l in f.readlines()]
@@ -54,28 +55,39 @@ def ote2asdf(otepcf, outname, ref_kw):
     model_poly = input2poly_mapping | (x_poly_forward & y_poly_forward) | output2poly_mapping
 
     model = model_poly | mlinear
+    ote_model = OTEModel()
+    ote_model.model = model
+    return ote_model
 
 
-    f = AsdfFile()
-    f.tree = ref_kw.copy()
-    f.tree['model'] = model
-    f.add_history_entry("Build 6")
-    f.write_to(outname)
-    return model_poly, mlinear
+def create_ote_reference(ote_file, output_name, author=None, description=None, useafter=None):
+    f = open(ote_file)
+    lines = [l.strip() for l in f.readlines()]
+    f.close()
+    for i, line in enumerate(lines):
+        if 'AUTHOR' in line:
+            auth = lines[i + 1]
+            continue
+        elif 'DESCRIPTION' in line:
+            descrip = lines[i + 1]
+            continue
+        elif 'DATE' in line:
+            date = lines[i + 1]
+            continue
 
-if __name__ == '__main__':
-    import argpars
-    parser = argpars.ArgumentParser(description="Creates NIRSpec 'ote' reference file in ASDF format.")
-    parser.add_argument("ote_file", type=str, help="OTE file.")
-    parser.add_argument("output_name", type=str, help="Output file name")
-    res = parser.parse_args()
-    if res.output_name is None:
-        output_name = "nirspec_ote.asdf"
-    else:
-        output_name = res.output_name
-    ref_kw = common_reference_file_keywords("OTE", "NIRSPEC OTE Model - CDP4")
-
+    if author is None:
+        author = auth
+    if description is None:
+        description = descrip
+    if useafter is None:
+        useafter = date
     try:
-        ote2asdf(ote_refname, ote_name, ref_kw)
+        model = ote2asdf(ote_file, author, description, useafter)
     except:
         raise Exception("OTE file was not converted.")
+    entry = HistoryEntry({'description': "New version created from CV3 with updated file structure", 'time': datetime.datetime.utcnow()})
+    software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
+                         'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
+    entry['software'] = software
+    model.history = [entry]
+    model.to_asdf(output_name)

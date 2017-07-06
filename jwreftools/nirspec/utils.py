@@ -91,7 +91,7 @@ def linear_from_pcf_det2sky(pcffile):
 
 
 
-def pcf2model(pcffile):#, ref_file_kw):
+def pcf2model(pcffile, name=""):
     """
     Create a model from a NIRSPEC Camera.pcf or Collimator*.pcf file.
 
@@ -142,19 +142,19 @@ def pcf2model(pcffile):#, ref_file_kw):
     xcoeff_index = lines.index('*xForwardCoefficients 21 2')
     xlines = lines[xcoeff_index + 1: xcoeff_index + 22]
     xcoeff_forward = coeffs_from_pcf(degree, xlines)
-    x_poly_backward = models.Polynomial2D(degree, name='x_poly_backward', **xcoeff_forward)
+    x_poly_backward = models.Polynomial2D(degree, name=name+'x_backward', **xcoeff_forward)
 
     ycoeff_index = lines.index('*yForwardCoefficients 21 2')
     ycoeff_forward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
-    y_poly_backward = models.Polynomial2D(degree, name='y_poly_backward', **ycoeff_forward)
+    y_poly_backward = models.Polynomial2D(degree, name=name+'y_backward', **ycoeff_forward)
 
     xcoeff_index = lines.index('*xBackwardCoefficients 21 2')
     xcoeff_backward = coeffs_from_pcf(degree, lines[xcoeff_index + 1: xcoeff_index + 22])
-    x_poly_forward = models.Polynomial2D(degree, name='x_poly_forward', **xcoeff_backward)
+    x_poly_forward = models.Polynomial2D(degree, name=name+'x_forward', **xcoeff_backward)
 
     ycoeff_index = lines.index('*yBackwardCoefficients 21 2')
     ycoeff_backward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
-    y_poly_forward = models.Polynomial2D(degree, name='y_poly_forward', **ycoeff_backward)
+    y_poly_forward = models.Polynomial2D(degree, name=name+'y_forward', **ycoeff_backward)
 
     x_poly_forward.inverse = x_poly_backward
     y_poly_forward.inverse = y_poly_backward
@@ -167,13 +167,8 @@ def pcf2model(pcffile):#, ref_file_kw):
     model_poly = input2poly_mapping | (x_poly_forward & y_poly_forward) | output2poly_mapping
 
     model = model_poly | linear_det2sky
-
-    #f = AsdfFile()
-    #f.tree = ref_file_kw.copy()
-    #f.add_history_entry("Build 6")
-    #f.tree['model'] = model
-    #f.write_to(outname)
     return model
+
 
 def coeffs_from_pcf(degree, coeffslist):
     coeffs = {}

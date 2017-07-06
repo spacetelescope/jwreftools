@@ -1,10 +1,13 @@
+import datetime
 import numpy as np
-from asdf import AsdfFile
+from jwst.datamodels import FPAModel
 from astropy.modeling import models
-from .utils import common_reference_file_keywords
+from asdf.tags.core import HistoryEntry, Software
+
+__all__ = ["create_fpa_reference", "fpa2asdf"]
 
 
-def fpa2asdf(fpafile, outname, ref_kw):
+def fpa2asdf(fpafile, author, description, useafter):
     """
     Create an asdf reference file with the FPA description.
 
@@ -47,8 +50,6 @@ def fpa2asdf(fpafile, outname, ref_kw):
     nrs2_posx = float(lines[ind+1])
     ind = lines.index("*SCA492_PosY")
     nrs2_posy = float(lines[ind+1])
-    #print('nrs2_angle', nrs2_angle, nrs2_pitchx, nrs2_pitchy, nrs2_posx, nrs2_posy)
-    tree = ref_kw.copy()
 
     # NRS1 Sky to Detector
     scaling = np.array([[1/nrs1_pitchx, 0], [0, 1/nrs1_pitchy]])
@@ -81,19 +82,55 @@ def fpa2asdf(fpafile, outname, ref_kw):
     scaling = np.array([[-nrs2_pitchx, 0], [0, -nrs2_pitchy]])
     matrix = np.dot(scaling, rotmat)
     aff = models.AffineTransformation2D(matrix, name='fpa_affine_detector2sky')
-    nrs2_det2sky = aff | models.Shift(nrs2_posx, name='fpa_shift_x_det2sky') & \
+    nrs2_det2sky = aff | models.Shift(nrs2_posx, name='fpa_shift_x_det2sky') &  \
         models.Shift(nrs2_posy, name='fpa_shift_y_det2sky')
     
     nrs2_det2sky.inverse = nrs2_sky2det
 
-    tree['NRS1'] = nrs1_det2sky
-    tree['NRS2'] = nrs2_det2sky
-    fasdf = AsdfFile()
-    fasdf.tree = tree
-    fasdf.add_history_entry("Build 6")
-    fasdf.write_to(outname)
-    return fasdf
+    fpa_model = FPAModel()
+    fpa_model.nrs1_model = nrs1_det2sky
+    fpa_model.nrs2_model = nrs2_det2sky
+    fpa_model.meta.author = author
+    fpa_model.meta.description = description
+    fpa_model.meta.useafter = useafter
+    fpa_model.meta.pedigree = "GROUND"
 
+    return fpa_model
+
+def create_fpa_reference(fpa_refname, out_name, author=None, description=None, useafter=None):
+    with open(fpa_refname) as f:
+        lines = f.readlines()
+        lines = [l.strip() for l in lines]
+    for i, line in enumerate(lines):
+        if 'AUTHOR' in line:
+            auth = lines[i + 1]
+            continue
+        elif 'DESCRIPTION' in line:
+            descrip = lines[i + 1]
+            continue
+        elif 'DATE' in line:
+            date = lines[i + 1]
+            continue
+        
+    if author is None:
+        author = auth
+    if description is None:
+        description = descrip
+    if useafter is None:
+        useafter = date
+
+    try:
+        model = fpa2asdf(fpa_refname, author, description, useafter)
+    except:
+        raise
+    entry = HistoryEntry({'description': "New version created from CV3 with updated file structure", 'time': datetime.datetime.utcnow()})
+    software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
+                         'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
+    entry['software'] = software
+    model.history = [entry]
+    model.to_asdf(out_name)
+
+'''
 if __name__ == '__main__':
     import argpars
     parser = argpars.ArgumentParser(description="Creates NIRSpec 'fpa' reference file in ASDF format.")
@@ -110,4 +147,4 @@ if __name__ == '__main__':
         fpa2asdf(res.fpa_file, output_name, ref_kw)
     except:
         raise Exception("FPA file was not converted.")
-
+'''

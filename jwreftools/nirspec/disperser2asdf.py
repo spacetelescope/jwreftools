@@ -1,11 +1,13 @@
 import os.path
 import datetime
+import numpy as np
 from astropy.modeling import models
 
-from .utils import pcf2model#, common_reference_file_keywords)
+from .utils import pcf2model
 from jwst.datamodels import DisperserModel
 from asdf.tags.core import Software, HistoryEntry
 
+__all__ = ["create_disperser_refs", "disperser2asdf"]
 
 
 def disperser2asdf(disfile, tiltyfile, tiltxfile, author, description, useafter):
@@ -48,7 +50,6 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, author, description, useafter)
         d = dict.fromkeys(['tref', 'pref', 'angle', 'lcoef', 'kcoef', 'tcoef', 'wbound'
                            'theta_z', 'theta_y', 'theta_x', 'tilt_y'])
 
-    #d.update(ref_kw)
     try:
         ind = lines.index('*GRATINGNAME')
         grating_name = lines[ind + 1]
@@ -118,7 +119,9 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, author, description, useafter)
         disperser_model.tcoef = d['tcoef']
         disperser_model.pref = d['pref']
         disperser_model.tref = d['tref']
+        disperser_model.wbound = d['wbound']
 
+    # Quantities common to prism and grating
     disperser_model.gwa_tiltx = d['gwa_tiltx']
     disperser_model.gwa_tilty = d['gwa_tilty']
     disperser_model.theta_x = d['theta_x']
@@ -126,10 +129,15 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, author, description, useafter)
     disperser_model.theta_z = d['theta_z']
     disperser_model.tilt_x = d['tilt_x']
     disperser_model.tilt_y = d['tilt_y']
-    disperser_model.wbound = d['wbound']
-    disperser.meta.pgrating = "ANY|N/A|G140M|G140H|G235M|G235H|G395M|G395H|MIRROR|PRISM|"
-    disperser_model.meta.exp_type = "N/A"
 
+    disperser_model.meta.pgrating = "ANY|N/A|G140M|G140H|G235M|G235H|G395M|G395H|MIRROR|PRISM|"
+    disperser_model.meta.exp_type = "N/A"
+    entry = HistoryEntry({'description': "New version created from CV3 with updated file structure", 'time': datetime.datetime.utcnow()})
+    software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
+                         'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
+    entry['software'] = software
+    disperser_model.history = [entry]
+    return disperser_model
 
 
 def disperser_tilt(tiltfile):
@@ -160,33 +168,46 @@ def disperser_tilt(tiltfile):
             tilt_d['unit'] = line.split('\n')[1]
     return tilt_d
 
-if __name__ == '__main__':
-    import argpars
-    parser = argpars.ArgumentParser(description="Creates NIRSpec 'disperser' reference files in ASDF format.")
-    parser.add_argument("disperser_dir", type=str, help="Directory with disperser files.")
-    res = parser.parse_args()
 
+def create_disperser_refs(model_dir, author=None, description=None, useafter=None):
     for i, grating in enumerate(["G140H", "G140M", "G235H", "G235M", "G395H",
                                  "G395M", "MIRROR", "PRISM"]):
-        # disperser refers to the whole reference file, either on disk or asdf
-        # grating to the parameter the reference file is selected on
-        disperser_name =  "nirspec_disperser_{0}.asdf".format(grating)
-        ref_kw = common_reference_file_keywords(reftype="disperser", title="NIRSPEC Disperser Description - CDP4",
-                                                description="Grating as built description, tilt x/y/z fitted with FM2 CAL phase data.",
-                                                exp_type="N/A", useafter=useafter, author=author, filename=disperser_name)
-        ref_kw['grating'] = grating
+
+        disperser_name =  "disperser_cv3_{0}.asdf".format(grating)
         if grating == 'PRISM':
             dis_file = "disperser_" + grating + ".pri"
         else:
             dis_file = "disperser_" + grating + ".dis"
         gtpy_file = "disperser_" + grating + "_TiltY.gtp"
         gtpx_file = "disperser_" + grating + "_TiltX.gtp"
-        disp_refname = os.path.join(ref_files, "Description", dis_file)
-        tilty_refname = os.path.join(ref_files, "Description", gtpy_file)
-        tiltx_refname = os.path.join(ref_files, "Description", gtpx_file)
+        disp_refname = os.path.join(model_dir, "Description", dis_file)
+        tilty_refname = os.path.join(model_dir, "Description", gtpy_file)
+        tiltx_refname = os.path.join(model_dir, "Description", gtpx_file)
+        
+        f = open(disp_refname)
+        lines = f.readlines()
+        lines = [l.strip() for l in lines]
+        f.close()
+        for i, line in enumerate(lines):
+            if 'AUTHOR' in line:
+                auth = lines[i + 1]
+                continue
+            elif 'DESCRIPTION' in line:
+                descrip = lines[i + 1]
+                continue
+            elif 'DATE' in line:
+                date = lines[i + 1]
+                continue
 
+        if author is None:
+            author = auth
+        if description is None:
+            description = descrip
+        if useafter is None:
+            useafter = date
 
         try:
-            disperser2asdf(disp_refname, tilty_refname, tiltx_refname, disperser_name, ref_kw)
+            disperser_model = disperser2asdf(disp_refname, tilty_refname, tiltx_refname, author, description, useafter)
         except:
             raise Exception("Disperser file was not converted.")
+        disperser_model.to_asdf(disperser_name)

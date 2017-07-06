@@ -1,42 +1,105 @@
-#from asdf import AsdfFile
+import datetime
+import os.path
+from asdf.tags.core import Software, HistoryEntry
 from astropy.modeling.models import Mapping, Identity
 from astropy.modeling import models
 from .utils import linear_from_pcf_det2sky, coeffs_from_pcf
 
-from jwst.datamodels import FOREModel
+from jwst.datamodels import FOREModel, IFUFOREModel
 
 
-def slitfore2asdf():
+__all__ = ["create_fore_reference", "create_ifufore_reference", "fore2asdf"]
+
+
+def create_fore_reference(refdir, author=None, description=None, useafter=None):
     # fore reference file
     for i, filter in enumerate(["CLEAR", "F070LP", "F100LP", "F110W", "F140X", "F170LP", "F290LP"]):
-        fore_name = "nirspec_fore_{0}.asdf".format(filter)
-        #ref_kw = common_reference_file_keywords(reftype="fore", title="NIRSPEC FORE Model - CDP4",
-                                                #description="FORE transform.",
-                                                #exp_type="N/A", useafter=useafter, author=author,
-                                                #filename=fore_name)
-        #ref_kw['filter'] = filter
         filename = "Fore_{0}.pcf".format(filter)
-        fore_refname = os.path.join(ref_files, "CoordTransform", filename)
+        out_name = "fore_cv3_{0}.asdf".format(filter)
+        fore_refname = os.path.join(refdir, "CoordTransform", filename)
+        with open(fore_refname) as f:
+            lines = f.readlines()
+        lines = [l.strip() for l in lines]
+        for i, line in enumerate(lines):
+            if 'AUTHOR' in line:
+                auth = lines[i + 1]
+                continue
+            elif 'DESCRIPTION' in line:
+                descrip = lines[i + 1]
+                continue
+            elif 'DATE' in line:
+                date = lines[i + 1]
+                continue
+
+        if author is None:
+            author = auth
+        if description is None:
+            description = descrip
+        if useafter is None:
+            useafter = date
 
         try:
-            fore2asdf(fore_refname, fore_name, ref_kw)
+            model = fore2asdf(fore_refname)
         except:
             raise Exception(("FORE file was not created - filter {0}".format(filter)))
+        fore_model = FOREModel()
+        fore_model.model = model
+        fore_model.meta.pedigree = 'GROUND'
+        fore_model.meta.authour = author
+        fore_model.meta.description = description
+        fore_model.meta.useafter = useafter
+
+        entry = HistoryEntry({'description': "New version created from CV3 with updated file structure", 'time': datetime.datetime.utcnow()})
+        software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
+                             'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
+        entry['software'] = software
+        fore_model.history = [entry]
+        fore_model.to_asdf(out_name)
 
 
+def create_ifufore_reference(ifufore_refname, out_name, author=None, description=None, useafter=None):
+    #filename = "IFU_FORE.pcf"
+    with open(ifufore_refname) as f:
+        lines = f.readlines()
+    lines = [l.strip() for l in lines]
+    for i, line in enumerate(lines):
+        if 'AUTHOR' in line:
+            auth = lines[i + 1]
+            continue
+        elif 'DESCRIPTION' in line:
+            descrip = lines[i + 1]
+            continue
+        elif 'DATE' in line:
+            date = lines[i + 1]
+            continue
 
-def ifufore2asdf():
-    filename = "IFU_FORE.pcf"
-    ifufore_refname = os.path.join(ref_files, "CoordTransform", "IFU", filename)
-
+    if author is None:
+        author = auth
+    if description is None:
+        description = descrip
+    if useafter is None:
+        useafter = date
     try:
-        _fore2asdf(ifufore_refname, ifufore_name, ref_kw)
+        model = fore2asdf(ifufore_refname)
     except:
         print("FORE file was not created.")
         raise
+    ifufore_model = IFUFOREModel()
+    ifufore_model.model = model
+    ifufore_model.meta.pedigree = 'GROUND'
+    ifufore_model.meta.authour = author
+    ifufore_model.meta.description = description
+    ifufore_model.meta.useafter = useafter
+
+    entry = HistoryEntry({'description': "New version created from CV3 with updated file structure", 'time': datetime.datetime.utcnow()})
+    software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
+                         'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
+    entry['software'] = software
+    ifufore_model.history = [entry]
+    ifufore_model.to_asdf(out_name)
 
 
-def fore2asdf(pcffore, author, description, useafter):#outname, ref_kw):
+def fore2asdf(pcffore):
     """
     forward direction : msa 2 ote
     backward_direction: msa 2 fpa
@@ -116,22 +179,26 @@ def fore2asdf(pcffore, author, description, useafter):#outname, ref_kw):
     model_x.inverse = model_x_backward
     model_y.inverse = model_y_backward
 
-    model = (Mapping((0, 1, 2, 0, 1, 2)) | model_poly) | fore_linear
+    output2poly_mapping = Identity(2, name="output_mapping")
+    output2poly_mapping.inverse = Mapping([0, 1, 2, 0, 1, 2])
+    input2poly_mapping = Mapping([0, 1, 2, 0, 1, 2], name="input_mapping")
+    input2poly_mapping.inverse = Identity(2)
 
-    #f = AsdfFile()
-    #f.tree = ref_kw.copy()
-    #f.tree['model'] = model
-    #f.add_history_entry("Build 6")
-    #asdffile = f.write_to(outname)
-    #return asdffile
-    fore_model = FOREModel()
-    fore_model.model = model
-    fore_model.meta.pedigree = 'GROUND'
-    fore_model.meta.authour = author
-    fore_model.meta.description = description
-    fore_model.meta.useafter = useafter
+    model_poly = input2poly_mapping  | (model_x & model_y) | output2poly_mapping
 
 
+    model = model_poly | fore_linear
+
+    #fore_model = FOREModel()
+    #fore_model.model = model
+    #fore_model.meta.pedigree = 'GROUND'
+    #fore_model.meta.authour = author
+    #fore_model.meta.description = description
+    #fore_model.meta.useafter = useafter
+    return model
+
+
+'''
 if __name__ == '__main__':
     import argpars
     parser = argpare.ArgumentParser(description="Creates NIRSpec 'fore' reference files in ASDF format.")
@@ -142,3 +209,4 @@ if __name__ == '__main__':
         ifufore2asdf()
     else:
         slitfore2asdf()
+'''

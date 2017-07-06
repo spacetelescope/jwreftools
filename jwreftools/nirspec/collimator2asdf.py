@@ -3,10 +3,12 @@ from .utils import pcf2model#, common_reference_file_keywords)
 from jwst.datamodels import CollimatorModel
 from asdf.tags.core import Software, HistoryEntry
 
+__all__ = ["create_collimator_reference", "collimator2asdf"]
+
 
 def collimator2asdf(collimator_refname, author, description, useafter):
     try:
-        model = pcf2model(collimator_refname)
+        model = pcf2model(collimator_refname, name="collimator")
     except:
         print("Collimator file was not converted.")
         raise
@@ -25,17 +27,29 @@ def collimator2asdf(collimator_refname, author, description, useafter):
     return collimator_model
 
 
-#if __name__ == '__main__':
-    #import argpars
-    #parser = argpars.ArgumentParser(description="Creates NIRSpec 'collimator' reference file in ASDF format.")
-    #parser.add_argument("collimator_file", type=str, help="Collimator file.")
-    #parser.add_argument("output_name", type=str, help="Output file name")
-    #res = parser.parse_args()
-    #if res.output_name is None:
-        #output_name = "nirspec_collimator.asdf"
-    #else:
-        #output_name = res.output_name
+def create_collimator_reference(collimator_refname, out_name, author=None, description=None, useafter=None):
+    with open(collimator_refname) as f:
+        lines = f.readlines()
+        lines = [l.strip() for l in lines]
+    for i, line in enumerate(lines):
+        if 'AUTHOR' in line:
+            auth = lines[i + 1]
+            continue
+        elif 'DESCRIPTION' in line:
+            descrip = lines[i + 1]
+            continue
+        elif 'DATE' in line:
+            date = lines[i + 1]
+            continue
 
-    #ref_kw = common_reference_file_keywords("COLLIMATOR", "NIRSPEC Collimator Model - CDP4")
-    #collimator2asdf(collimator_file, output_name, ref_kw)
-
+    if author is None:
+        author = auth
+    if description is None:
+        description = descrip
+    if useafter is None:
+        useafter = date
+    try:
+        model = collimator2asdf(collimator_refname, author, description, useafter)
+    except:
+        raise
+    model.to_asdf(out_name)
