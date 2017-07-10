@@ -57,6 +57,10 @@ def ote2asdf(otepcf, author, description, useafter):
     model = model_poly | mlinear
     ote_model = OTEModel()
     ote_model.model = model
+    ote_model.meta.author = author
+    ote_model.meta.description = description
+    ote_model.meta.useafter = useafter
+    ote_model.meta.pedigree = "GROUND"
     return ote_model
 
 

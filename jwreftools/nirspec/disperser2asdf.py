@@ -129,7 +129,10 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, author, description, useafter)
     disperser_model.theta_z = d['theta_z']
     disperser_model.tilt_x = d['tilt_x']
     disperser_model.tilt_y = d['tilt_y']
-
+    disperser_model.meta.author = author
+    disperser_model.meta.pedigree = "GROUND"
+    disperser_model.meta.description = description
+    disperser_model.meta.useafter = useafter
     disperser_model.meta.pgrating = "ANY|N/A|G140M|G140H|G235M|G235H|G395M|G395H|MIRROR|PRISM|"
     disperser_model.meta.exp_type = "N/A"
     entry = HistoryEntry({'description': "New version created from CV3 with updated file structure", 'time': datetime.datetime.utcnow()})
@@ -183,7 +186,7 @@ def create_disperser_refs(model_dir, author=None, description=None, useafter=Non
         disp_refname = os.path.join(model_dir, "Description", dis_file)
         tilty_refname = os.path.join(model_dir, "Description", gtpy_file)
         tiltx_refname = os.path.join(model_dir, "Description", gtpx_file)
-        
+
         f = open(disp_refname)
         lines = f.readlines()
         lines = [l.strip() for l in lines]
@@ -207,7 +210,8 @@ def create_disperser_refs(model_dir, author=None, description=None, useafter=Non
             useafter = date
 
         try:
-            disperser_model = disperser2asdf(disp_refname, tilty_refname, tiltx_refname, author, description, useafter)
+            disperser_model = disperser2asdf(disp_refname, tilty_refname, tiltx_refname,
+                                             author, description, useafter)
         except:
             raise Exception("Disperser file was not converted.")
         disperser_model.to_asdf(disperser_name)

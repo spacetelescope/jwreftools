@@ -45,7 +45,7 @@ def create_fore_reference(refdir, author=None, description=None, useafter=None):
         fore_model = FOREModel()
         fore_model.model = model
         fore_model.meta.pedigree = 'GROUND'
-        fore_model.meta.authour = author
+        fore_model.meta.author = author
         fore_model.meta.description = description
         fore_model.meta.useafter = useafter
 
@@ -87,7 +87,7 @@ def create_ifufore_reference(ifufore_refname, out_name, author=None, description
     ifufore_model = IFUFOREModel()
     ifufore_model.model = model
     ifufore_model.meta.pedigree = 'GROUND'
-    ifufore_model.meta.authour = author
+    ifufore_model.meta.author = author
     ifufore_model.meta.description = description
     ifufore_model.meta.useafter = useafter
 
