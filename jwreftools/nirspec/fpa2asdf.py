@@ -129,6 +129,8 @@ def create_fpa_reference(fpa_refname, out_name, author=None, description=None, u
     entry['software'] = software
     model.history = [entry]
     model.to_asdf(out_name)
+    model.validate()
+
 
 '''
 if __name__ == '__main__':

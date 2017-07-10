@@ -52,7 +52,8 @@ def create_camera_reference(camera_refname, out_name, author=None, description=N
     except:
         raise
     model.to_asdf(out_name)
-
+    new_model = CameraModel(out_name)
+    new_model.validate()
 
 #if __name__ == '__main__':
     #import argpars

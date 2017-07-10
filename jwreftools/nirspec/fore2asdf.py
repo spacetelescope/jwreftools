@@ -56,6 +56,7 @@ def create_fore_reference(refdir, author=None, description=None, useafter=None):
         entry['software'] = software
         fore_model.history = [entry]
         fore_model.to_asdf(out_name)
+        fore_model.validate()
 
 
 def create_ifufore_reference(ifufore_refname, out_name, author=None, description=None, useafter=None):
@@ -98,6 +99,7 @@ def create_ifufore_reference(ifufore_refname, out_name, author=None, description
     entry['software'] = software
     ifufore_model.history = [entry]
     ifufore_model.to_asdf(out_name)
+    ifufore_model.validate()
 
 
 def fore2asdf(pcffore):

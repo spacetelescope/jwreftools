@@ -64,3 +64,4 @@ def create_ifuslicer_reference(ifuslicer_refname, output_name, author=None, desc
     entry['software'] = software
     model.history = [entry]
     model.to_asdf(output_name)
+    model.validate()

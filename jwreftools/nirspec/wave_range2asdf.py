@@ -89,5 +89,4 @@ def create_wavelengthrange_reference(wave_range_file, output_name, author=None, 
     entry['software'] = software
     wr_model.history = [entry]
     wr_model.to_asdf(output_name)
-
-
+    wr_model.validate()

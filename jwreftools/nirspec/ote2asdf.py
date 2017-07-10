@@ -96,3 +96,4 @@ def create_ote_reference(ote_file, output_name, author=None, description=None,
     entry['software'] = software
     model.history = [entry]
     model.to_asdf(output_name)
+    model.validate()

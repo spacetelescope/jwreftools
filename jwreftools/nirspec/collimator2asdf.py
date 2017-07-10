@@ -53,3 +53,5 @@ def create_collimator_reference(collimator_refname, out_name, author=None, descr
     except:
         raise
     model.to_asdf(out_name)
+    new_model = CollimatorModel(out_name)
+    new_model.validate()

@@ -127,3 +127,4 @@ def create_ifupost_reference(model_dir, out_name, author=None, description=None,
     entry['software'] = software
     model.history = [entry]
     model.to_asdf(out_name)
+    model.validate()
