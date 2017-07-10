@@ -214,4 +214,5 @@ def create_disperser_refs(model_dir, author=None, description=None, useafter=Non
                                              author, description, useafter)
         except:
             raise Exception("Disperser file was not converted.")
+        disperser_model.meta.instrument.grating = grating
         disperser_model.to_asdf(disperser_name)

@@ -48,6 +48,7 @@ def create_fore_reference(refdir, author=None, description=None, useafter=None):
         fore_model.meta.author = author
         fore_model.meta.description = description
         fore_model.meta.useafter = useafter
+        fore_model.meta.instrument.filter = filter
 
         entry = HistoryEntry({'description': "New version created from CV3 with updated file structure", 'time': datetime.datetime.utcnow()})
         software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
@@ -185,28 +186,6 @@ def fore2asdf(pcffore):
     input2poly_mapping.inverse = Identity(2)
 
     model_poly = input2poly_mapping  | (model_x & model_y) | output2poly_mapping
-
-
     model = model_poly | fore_linear
 
-    #fore_model = FOREModel()
-    #fore_model.model = model
-    #fore_model.meta.pedigree = 'GROUND'
-    #fore_model.meta.authour = author
-    #fore_model.meta.description = description
-    #fore_model.meta.useafter = useafter
     return model
-
-
-'''
-if __name__ == '__main__':
-    import argpars
-    parser = argpare.ArgumentParser(description="Creates NIRSpec 'fore' reference files in ASDF format.")
-    parser.add_argument("mode", type=str, help="'ifu' or 'slit'")
-
-    res = parser.parse_args()
-    if res.mode == "ifu":
-        ifufore2asdf()
-    else:
-        slitfore2asdf()
-'''

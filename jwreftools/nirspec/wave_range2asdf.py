@@ -52,7 +52,12 @@ def wavelength_range(spectral_conf, author, description, useafter):
     wr_model.meta.description = description
     wr_model.meta.useafter = useafter
     wr_model.meta.pedigree = "GROUND"
-
+    wr_model.meta.instrument.name = "NIRSPEC"
+    wr_model.meta.instrument.p_detector = "NRS1|NRS2|"
+    wr_model.meta.exposure.p_exptype = "NRS_TACQ|NRS_TASLIT|NRS_TACONFIRM|\
+    NRS_CONFIRM|NRS_FIXEDSLIT|NRS_IFU|NRS_MSASPEC|NRS_IMAGE|NRS_FOCUS|\
+    NRS_MIMF|NRS_BOTA|NRS_LAMP|NRS_BRIGHTOBJ|"
+    wr_model.meta.exposure.type = "N/A"
     return wr_model
 
 def create_wavelengthrange_reference(wave_range_file, output_name, author=None, description=None, useafter=None):

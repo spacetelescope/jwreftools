@@ -64,7 +64,8 @@ def ote2asdf(otepcf, author, description, useafter):
     return ote_model
 
 
-def create_ote_reference(ote_file, output_name, author=None, description=None, useafter=None):
+def create_ote_reference(ote_file, output_name, author=None, description=None,
+                         useafter="2016-03-01T09:08:05"):
     f = open(ote_file)
     lines = [l.strip() for l in f.readlines()]
     f.close()
