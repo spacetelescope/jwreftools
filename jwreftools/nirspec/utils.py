@@ -34,11 +34,13 @@ def homothetic_det2sky(input_center, angle, scale, output_center, name=""):
     scaling = np.array([[1/scale[0] , 0], [0, 1/scale[1]]])
     mat_det2sky = np.dot(rotmat_det2sky, scaling)
 
-    aff = models.AffineTransformation2D(matrix=mat_det2sky, name="affine_det2sky_{0}".format(name))
+    aff = models.AffineTransformation2D(matrix=mat_det2sky,
+                                        name="{0}_affine_d2s".format(name))
 
-
-    transform = models.Shift(-output_center[0], name="x_input_center_det2sky") & models.Shift(-output_center[1],  name="y_input_center_det2sky") | \
-              aff | models.Shift(input_center[0],  name="x_output_center_det2sky") & models.Shift(input_center[1],  name="y_output_center_det2sky")
+    transform = models.Shift(-output_center[0], name="{0}_xincen_d2s".format(name)) & \
+              models.Shift(-output_center[1],  name="{0}_yincen_d2s".format(name)) | \
+              aff | models.Shift(input_center[0],  name="{0}_xoutcen_d2s".format(name)) & \
+              models.Shift(input_center[1],  name="{0}_youtcen_d2s".format(name))
     return transform
 
 
@@ -70,15 +72,17 @@ def homothetic_sky2det(input_center, angle, scale, output_center, name=""):
     scaling = np.array([[scale[0] , 0], [0, scale[1]]])
     mat_sky2det = np.dot(scaling, rotmat_sky2det)
 
-    aff = models.AffineTransformation2D(matrix=mat_sky2det, name="affine_{0}".format(name))
+    aff = models.AffineTransformation2D(matrix=mat_sky2det, name="{0}_affine".format(name))
 
 
-    transform = models.Shift(-input_center[0], name="x_input_center_{0}".format(name)) & models.Shift(-input_center[1], name="y_input_center_{0}".format(name)) | aff | \
-              models.Shift(output_center[0], name="x_output_center_{0}".format(name)) & models.Shift(output_center[1], name="y_output_center_{0}".format(name))
+    transform = models.Shift(-input_center[0], name="{0}_xincen_s2d".format(name)) & \
+              models.Shift(-input_center[1], name="{0}_yincen_s2d".format(name)) | aff | \
+              models.Shift(output_center[0], name="{0}_xoutcen_s2d".format(name)) & \
+              models.Shift(output_center[1], name="{0}_youtcen_s2d".format(name))
     return transform
 
 
-def linear_from_pcf_det2sky(pcffile):
+def linear_from_pcf_det2sky(pcffile, name=""):
     with open(pcffile) as f:
         lines = [l.strip() for l in f.readlines()]
     factors = lines[lines.index('*Factor 2') + 1].split()
@@ -86,7 +90,8 @@ def linear_from_pcf_det2sky(pcffile):
     input_rot_center = lines[lines.index('*InputRotationCentre 2') + 1].split()
     output_rot_center = lines[lines.index('*OutputRotationCentre 2') + 1].split()
 
-    det2sky = homothetic_det2sky(input_rot_center, rotation_angle, factors, output_rot_center)
+    det2sky = homothetic_det2sky(input_rot_center, rotation_angle,
+                                 factors, output_rot_center, name=name)
     return det2sky
 
 
@@ -132,7 +137,7 @@ def pcf2model(pcffile, name=""):
     >>> pcf2asdf("Camera.pcf", "camera.asdf")
 
     """
-    linear_det2sky = linear_from_pcf_det2sky(pcffile)
+    linear_det2sky = linear_from_pcf_det2sky(pcffile, name=name)
 
     with open(pcffile) as f:
         lines = [l.strip() for l in f.readlines()]
@@ -142,26 +147,30 @@ def pcf2model(pcffile, name=""):
     xcoeff_index = lines.index('*xForwardCoefficients 21 2')
     xlines = lines[xcoeff_index + 1: xcoeff_index + 22]
     xcoeff_forward = coeffs_from_pcf(degree, xlines)
-    x_poly_backward = models.Polynomial2D(degree, name=name+'x_backward', **xcoeff_forward)
+    x_poly_backward = models.Polynomial2D(degree, name='{0}_x_backward'.format(name),
+                                          **xcoeff_forward)
 
     ycoeff_index = lines.index('*yForwardCoefficients 21 2')
     ycoeff_forward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
-    y_poly_backward = models.Polynomial2D(degree, name=name+'y_backward', **ycoeff_forward)
+    y_poly_backward = models.Polynomial2D(degree, name='{0}_y_backward'.format(name),
+                                          **ycoeff_forward)
 
     xcoeff_index = lines.index('*xBackwardCoefficients 21 2')
     xcoeff_backward = coeffs_from_pcf(degree, lines[xcoeff_index + 1: xcoeff_index + 22])
-    x_poly_forward = models.Polynomial2D(degree, name=name+'x_forward', **xcoeff_backward)
+    x_poly_forward = models.Polynomial2D(degree, name='{0}_x_forward'.format(name),
+                                         **xcoeff_backward)
 
     ycoeff_index = lines.index('*yBackwardCoefficients 21 2')
     ycoeff_backward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
-    y_poly_forward = models.Polynomial2D(degree, name=name+'y_forward', **ycoeff_backward)
+    y_poly_forward = models.Polynomial2D(degree, name='{0}_y_forward'.format(name),
+                                         **ycoeff_backward)
 
     x_poly_forward.inverse = x_poly_backward
     y_poly_forward.inverse = y_poly_backward
 
-    output2poly_mapping = Identity(2, name='output_mapping')
+    output2poly_mapping = Identity(2, name='{0}_outmap'.format(name))
     output2poly_mapping.inverse = Mapping([0, 1, 0, 1])
-    input2poly_mapping = Mapping([0, 1, 0, 1], name='input_mapping')
+    input2poly_mapping = Mapping([0, 1, 0, 1], name='{0}_inmap'.format(name))
     input2poly_mapping.inverse = Identity(2)
 
     model_poly = input2poly_mapping | (x_poly_forward & y_poly_forward) | output2poly_mapping
@@ -182,24 +191,3 @@ def coeffs_from_pcf(degree, coeffslist):
             else:
                 continue
     return coeffs
-
-
-def common_reference_file_keywords(reftype, title, description, exp_type,
-                                   useafter, author, filename, **kwargs):
-    """
-    exp_type can be also "N/A", or "ANY".
-    """
-    ref_file_common_keywords = {
-        "author": author,
-        "description": description,
-        "exp_type": exp_type,
-        "filename": filename,
-        "instrume": "NIRSPEC",
-        "pedigree": "GROUND",
-        "reftype": reftype,
-        "telescope": "JWST",
-        "title": title,
-        "useafter": useafter,
-        }
-    ref_file_common_keywords.update(kwargs)
-    return ref_file_common_keywords

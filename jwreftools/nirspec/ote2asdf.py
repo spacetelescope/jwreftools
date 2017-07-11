@@ -27,29 +27,29 @@ def ote2asdf(otepcf, author, description, useafter):
     xcoeff_index = lines.index('*xBackwardCoefficients 21 2')
     xlines = lines[xcoeff_index + 1].split('\t')
     xcoeff_backward = coeffs_from_pcf(degree, xlines)
-    x_poly_forward = models.Polynomial2D(degree, name='x_ote_forward', **xcoeff_backward)
+    x_poly_forward = models.Polynomial2D(degree, name='ote_x_forw', **xcoeff_backward)
 
     xcoeff_index = lines.index('*xForwardCoefficients 21 2')
     xlines = lines[xcoeff_index + 1].split('\t')
     xcoeff_forward = coeffs_from_pcf(degree, xlines)
-    x_poly_backward = models.Polynomial2D(degree, name='x_ote_backward', **xcoeff_forward)
+    x_poly_backward = models.Polynomial2D(degree, name='ote_x_back', **xcoeff_forward)
 
     ycoeff_index = lines.index('*yBackwardCoefficients 21 2')
     ylines = lines[ycoeff_index + 1].split('\t')
     ycoeff_backward = coeffs_from_pcf(degree, ylines)
-    y_poly_forward = models.Polynomial2D(degree, name='y_ote_forward', **ycoeff_backward)
+    y_poly_forward = models.Polynomial2D(degree, name='ote_y_forw', **ycoeff_backward)
 
     ycoeff_index = lines.index('*yForwardCoefficients 21 2')
     ylines = lines[ycoeff_index + 1].split('\t')
     ycoeff_forward = coeffs_from_pcf(degree, ylines)
-    y_poly_backward = models.Polynomial2D(degree, name='y_ote_backward', **ycoeff_forward)
+    y_poly_backward = models.Polynomial2D(degree, name='ote_y_backw', **ycoeff_forward)
 
     x_poly_forward.inverse = x_poly_backward
     y_poly_forward.inverse = y_poly_backward
 
-    output2poly_mapping = Identity(2, name='output_mapping_ote')
+    output2poly_mapping = Identity(2, name='ote_outmap')
     output2poly_mapping.inverse = Mapping([0, 1, 0, 1])
-    input2poly_mapping = Mapping([0, 1, 0, 1], name='input_mapping_ote')
+    input2poly_mapping = Mapping([0, 1, 0, 1], name='ote_inmap')
     input2poly_mapping.inverse = Identity(2)
 
     model_poly = input2poly_mapping | (x_poly_forward & y_poly_forward) | output2poly_mapping

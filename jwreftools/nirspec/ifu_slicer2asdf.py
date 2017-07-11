@@ -26,9 +26,9 @@ def ifu_slicer2asdf(ifuslicer, author, description, useafter):
     f = fits.open(ifuslicer)
     data = f[1].data
     header = f[1].header
-    shiftx = models.Shift(header['XREF'], name='ifu_slicer_xref')
-    shifty = models.Shift(header['YREF'], name='ifu_slicer_yref')
-    rot = models.Rotation2D(np.rad2deg(header['ROT']), name='ifu_slicer_rot')
+    shiftx = models.Shift(header['XREF'], name='ifuslicer_x')
+    shifty = models.Shift(header['YREF'], name='ifuslicer_y')
+    rot = models.Rotation2D(np.rad2deg(header['ROT']), name='ifuslicer_rotate')
     model = rot | shiftx & shifty
     f.close()
 

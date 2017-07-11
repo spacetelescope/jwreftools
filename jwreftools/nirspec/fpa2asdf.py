@@ -55,17 +55,17 @@ def fpa2asdf(fpafile, author, description, useafter):
     scaling = np.array([[1/nrs1_pitchx, 0], [0, 1/nrs1_pitchy]])
     rotmat = models.Rotation2D._compute_matrix(-nrs1_angle)
     matrix = np.dot(scaling, rotmat)
-    aff = models.AffineTransformation2D(matrix, name='fpa_affine_sky2detector')
-    nrs1_sky2det = models.Shift(-nrs1_posx, name='fpa_shift_x') & \
-        models.Shift(-nrs1_posy, name='fpa_shift_y') | aff
+    aff = models.AffineTransformation2D(matrix, name='fpa_affine_s2d')
+    nrs1_sky2det = models.Shift(-nrs1_posx, name='fpa_x_s2d') & \
+        models.Shift(-nrs1_posy, name='fpa_y_s2d') | aff
 
     # NRS1 Detector to Sky
     rotmat = models.Rotation2D._compute_matrix(-nrs1_angle)
     scaling = np.array([[nrs1_pitchx, 0], [0, nrs1_pitchy]])
     matrix = np.dot(rotmat, scaling)
-    aff = models.AffineTransformation2D(matrix, name='fpa_affine_detector2sky')
-    nrs1_det2sky = aff | models.Shift(nrs1_posx, name='fpa_shift_x_det2sky') & \
-        models.Shift(nrs1_posy, name='fpa_shift_y_det2sky')
+    aff = models.AffineTransformation2D(matrix, name='fpa_affine_d2s')
+    nrs1_det2sky = aff | models.Shift(nrs1_posx, name='fpa_x_d2s') & \
+        models.Shift(nrs1_posy, name='fpa_y_d2s')
 
     nrs1_det2sky.inverse = nrs1_sky2det
 
@@ -73,18 +73,18 @@ def fpa2asdf(fpafile, author, description, useafter):
     scaling = np.array([[-1/nrs2_pitchx, 0], [0, -1/nrs2_pitchy]])
     rotmat = models.Rotation2D._compute_matrix(-nrs2_angle)
     matrix = np.dot(scaling, rotmat)
-    aff = models.AffineTransformation2D(matrix, name='fpa_affine_sky2detector')
-    nrs2_sky2det = models.Shift(-nrs2_posx, name='fpa_shixft_x') & \
-        models.Shift(-nrs2_posy, name='fpa_shift_y') | aff
-    
+    aff = models.AffineTransformation2D(matrix, name='fpa_affine_s2d')
+    nrs2_sky2det = models.Shift(-nrs2_posx, name='fpa_x_s2d') & \
+        models.Shift(-nrs2_posy, name='fpa_y_s2d') | aff
+
     # NRS2 Detector to Sky
     rotmat = models.Rotation2D._compute_matrix(nrs2_angle)
     scaling = np.array([[-nrs2_pitchx, 0], [0, -nrs2_pitchy]])
     matrix = np.dot(scaling, rotmat)
-    aff = models.AffineTransformation2D(matrix, name='fpa_affine_detector2sky')
-    nrs2_det2sky = aff | models.Shift(nrs2_posx, name='fpa_shift_x_det2sky') &  \
-        models.Shift(nrs2_posy, name='fpa_shift_y_det2sky')
-    
+    aff = models.AffineTransformation2D(matrix, name='fpa_affine_d2s')
+    nrs2_det2sky = aff | models.Shift(nrs2_posx, name='fpa_x_d2s') &  \
+        models.Shift(nrs2_posy, name='fpa_y_d2s')
+
     nrs2_det2sky.inverse = nrs2_sky2det
 
     fpa_model = FPAModel()
@@ -111,7 +111,7 @@ def create_fpa_reference(fpa_refname, out_name, author=None, description=None, u
         elif 'DATE' in line:
             date = lines[i + 1]
             continue
-        
+
     if author is None:
         author = auth
     if description is None:

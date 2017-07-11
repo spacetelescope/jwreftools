@@ -6,7 +6,7 @@ from astropy.io import fits
 from astropy.modeling import models
 from jwst.datamodels import MSAModel
 
-__all__ = ["create_msa_reference", "msa2asdf"] 
+__all__ = ["create_msa_reference", "msa2asdf"]
 
 def msa2asdf(msafile, author, description, useafter):
     """
@@ -24,17 +24,17 @@ def msa2asdf(msafile, author, description, useafter):
     f = fits.open(msafile)
     data = f[5].data # SLITS and IFU
     header = f[5].header
-    shiftx = models.Shift(header['SLITXREF'], name='slit_xref')
-    shifty = models.Shift(header['SLITYREF'], name='slit_yref')
-    slitrot = models.Rotation2D(np.rad2deg(header['SLITROT']), name='slit_rot')
+    shiftx = models.Shift(header['SLITXREF'], name='msa_slit_x')
+    shifty = models.Shift(header['SLITYREF'], name='msa_slit_y')
+    slitrot = models.Rotation2D(np.rad2deg(header['SLITROT']), name='msa_slit_rot')
     msa_model = MSAModel()
     msa_model.Q5.model = slitrot | shiftx & shifty
     msa_model.Q5.data = f[5].data
     for i in range(1, 5):
         header = f[i].header
-        shiftx = models.Shift(header['QUADXREF'], name='msa_xref')
-        shifty = models.Shift(header['QUADYREF'], name='msa_yref')
-        slitrot = models.Rotation2D(np.rad2deg(header['QUADROT']), name='msa_rot')
+        shiftx = models.Shift(header['QUADXREF'], name='msa_Q{0}_x'.format(i))
+        shifty = models.Shift(header['QUADYREF'], name='msa_Q{0}_y'.format(i))
+        slitrot = models.Rotation2D(np.rad2deg(header['QUADROT']), name='msa_Q{0}_rot'.format(i))
         model = slitrot | shiftx & shifty
         data = f[i].data
         name = "Q{0}".format(i)

@@ -39,7 +39,7 @@ def create_fore_reference(refdir, author=None, description=None, useafter=None):
             useafter = date
 
         try:
-            model = fore2asdf(fore_refname)
+            model = fore2asdf(fore_refname, name='fore')
         except:
             raise Exception(("FORE file was not created - filter {0}".format(filter)))
         fore_model = FOREModel()
@@ -82,9 +82,9 @@ def create_ifufore_reference(ifufore_refname, out_name, author=None, description
     if useafter is None:
         useafter = date
     try:
-        model = fore2asdf(ifufore_refname)
+        model = fore2asdf(ifufore_refname, name='ifufore')
     except:
-        print("FORE file was not created.")
+        print("IFUFORE file was not created.")
         raise
     ifufore_model = IFUFOREModel()
     ifufore_model.model = model
@@ -102,7 +102,7 @@ def create_ifufore_reference(ifufore_refname, out_name, author=None, description
     ifufore_model.validate()
 
 
-def fore2asdf(pcffore):
+def fore2asdf(pcffore, name=""):
     """
     forward direction : msa 2 ote
     backward_direction: msa 2 fpa
@@ -111,7 +111,7 @@ def fore2asdf(pcffore):
     with open(pcffore) as f:
         lines = [l.strip() for l in f.readlines()]
 
-    fore_det2sky = linear_from_pcf_det2sky(pcffore)
+    fore_det2sky = linear_from_pcf_det2sky(pcffore, name=name)
     fore_linear = fore_det2sky
     fore_linear.inverse = fore_det2sky.inverse & Identity(1)
 
@@ -122,10 +122,10 @@ def fore2asdf(pcffore):
     xlines = lines[xcoeff_index + 1: xcoeff_index + 22]
     xcoeff_forward = coeffs_from_pcf(degree, xlines)
     # Polynomial Correction in x
-    x_poly_backward = models.Polynomial2D(degree, name="x_poly_backward", **xcoeff_forward)
+    x_poly_backward = models.Polynomial2D(degree, name="{0}_x_back".format(name), **xcoeff_forward)
     xlines_distortion = lines[xcoeff_index + 22: xcoeff_index + 43]
     xcoeff_forward_distortion = coeffs_from_pcf(degree, xlines_distortion)
-    x_poly_backward_distortion = models.Polynomial2D(degree, name="x_backward_distortion",
+    x_poly_backward_distortion = models.Polynomial2D(degree, name="{0}_x_backdist".format(name),
                                                      **xcoeff_forward_distortion)
     # do chromatic correction
     # the input is Xote, Yote, lam
@@ -135,11 +135,11 @@ def fore2asdf(pcffore):
 
     ycoeff_index = lines.index('*yForwardCoefficients 21 2')
     ycoeff_forward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
-    y_poly_backward = models.Polynomial2D(degree, name="y_poly_backward",  **ycoeff_forward)
+    y_poly_backward = models.Polynomial2D(degree, name="{0}_y_back".format(name),  **ycoeff_forward)
 
     ylines_distortion = lines[ycoeff_index + 22: ycoeff_index + 43]
     ycoeff_forward_distortion = coeffs_from_pcf(degree, ylines_distortion)
-    y_poly_backward_distortion = models.Polynomial2D(degree, name="y_backward_distortion",
+    y_poly_backward_distortion = models.Polynomial2D(degree, name="{0}_y_backdist".format(name),
                                                      **ycoeff_forward_distortion)
 
     # do chromatic correction
@@ -150,10 +150,11 @@ def fore2asdf(pcffore):
 
     xcoeff_index = lines.index('*xBackwardCoefficients 21 2')
     xcoeff_backward = coeffs_from_pcf(degree, lines[xcoeff_index + 1: xcoeff_index + 22])
-    x_poly_forward = models.Polynomial2D(degree,name="x_poly_forward", **xcoeff_backward)
+    x_poly_forward = models.Polynomial2D(degree,name="{0}_x_forw".format(name), **xcoeff_backward)
 
     xcoeff_backward_distortion = coeffs_from_pcf(degree, lines[xcoeff_index + 22: xcoeff_index + 43])
-    x_poly_forward_distortion = models.Polynomial2D(degree, name="x_forward_distortion", **xcoeff_backward_distortion)
+    x_poly_forward_distortion = models.Polynomial2D(degree, name="{0}_x_forwdist".format(name),
+                                                    **xcoeff_backward_distortion)
 
     # the chromatic correction is done here
     # the input is Xmsa, Ymsa, lam
@@ -163,10 +164,10 @@ def fore2asdf(pcffore):
 
     ycoeff_index = lines.index('*yBackwardCoefficients 21 2')
     ycoeff_backward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
-    y_poly_forward = models.Polynomial2D(degree, name="y_poly_forward",**ycoeff_backward)
+    y_poly_forward = models.Polynomial2D(degree, name="{0}_y_forw".format(name), **ycoeff_backward)
 
     ycoeff_backward_distortion = coeffs_from_pcf(degree, lines[ycoeff_index + 22: ycoeff_index + 43])
-    y_poly_forward_distortion = models.Polynomial2D(degree, name="y_forward_distortion",
+    y_poly_forward_distortion = models.Polynomial2D(degree, name="{0}_y_forwdist".format(name),
                                                     **ycoeff_backward_distortion)
 
     # do chromatic correction
@@ -182,9 +183,9 @@ def fore2asdf(pcffore):
     model_x.inverse = model_x_backward
     model_y.inverse = model_y_backward
 
-    output2poly_mapping = Identity(2, name="output_mapping")
+    output2poly_mapping = Identity(2, name="{0}_outmap".format(name))
     output2poly_mapping.inverse = Mapping([0, 1, 2, 0, 1, 2])
-    input2poly_mapping = Mapping([0, 1, 2, 0, 1, 2], name="input_mapping")
+    input2poly_mapping = Mapping([0, 1, 2, 0, 1, 2], name="{0}_inmap".format(name))
     input2poly_mapping.inverse = Identity(2)
 
     model_poly = input2poly_mapping  | (model_x & model_y) | output2poly_mapping

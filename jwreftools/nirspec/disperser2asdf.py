@@ -133,7 +133,6 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, author, description, useafter)
     disperser_model.meta.pedigree = "GROUND"
     disperser_model.meta.description = description
     disperser_model.meta.useafter = useafter
-    disperser_model.meta.pgrating = "ANY|N/A|G140M|G140H|G235M|G235H|G395M|G395H|MIRROR|PRISM|"
     disperser_model.meta.exp_type = "N/A"
     entry = HistoryEntry({'description': "New version created from CV3 with updated file structure", 'time': datetime.datetime.utcnow()})
     software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
@@ -203,17 +202,22 @@ def create_disperser_refs(model_dir, author=None, description=None, useafter=Non
                 continue
 
         if author is None:
-            author = auth
+            file_author = auth
+        else:
+            file_author = author
         if description is None:
-            description = descrip
+            file_description = descrip
+        else:
+            file_description = description
         if useafter is None:
-            useafter = date
-
+            file_useafter = date
+        else:
+            file_useafter = useafter
         try:
             disperser_model = disperser2asdf(disp_refname, tilty_refname, tiltx_refname,
-                                             author, description, useafter)
+                                             file_author, file_description, file_useafter)
         except:
             raise Exception("Disperser file was not converted.")
         disperser_model.meta.instrument.grating = grating
-        disperser_model.to_asdf(disperser_name)
+        disperser_model.to_asdf(disperser_name, all_array_storage="inline")
         disperser_model.validate()
