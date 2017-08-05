@@ -255,6 +255,8 @@ def create_grism_config(conffile="",
     displ = []
     dispx = []
     dispy = []
+    mmag = []
+
     for order in orders:
        # convert the displ wavelengths to microns
         l1 = beamdict[order]['DISPL'][0] / 10000.
@@ -262,6 +264,7 @@ def create_grism_config(conffile="",
         displ.append((l1, l2))
         dispx.append(beamdict[order]['DISPX'])
         dispy.append(beamdict[order]['DISPY'])
+        mmag.append(beamdict[order]['MMAG_EXTRACT'])
 
     tree['orders'] = orders
     tree['wrange_selector'] = filters
@@ -269,6 +272,7 @@ def create_grism_config(conffile="",
     tree['xcoeff'] = dispx
     tree['ycoeff'] = dispy
     tree['wrange'] = wavelengthrange
+    tree['mmag_extract'] = mmag
 
     fasdf = AsdfFile()
     sdict = {'name': 'nircam_reftools.py',
@@ -278,7 +282,6 @@ def create_grism_config(conffile="",
 
     fasdf.add_history_entry(history, software=sdict)
     fasdf.tree = tree
-
     fasdf.write_to(outname)
 
 

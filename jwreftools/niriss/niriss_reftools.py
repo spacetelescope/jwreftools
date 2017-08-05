@@ -164,12 +164,12 @@ def create_grism_config(conffile="",
     for k, bdict in beamdict.items():
         if isinstance(bdict, dict):
             keys = bdict.keys()
-            # minmag = "MMAG_EXTRACT"
-            maxmag = "MMAG_MARK"
-            #if minmag not in keys:
-            #    beamdict[k][minmag] = 0.0
-            if maxmag not in keys:
-                beamdict[k][maxmag] = 0.0
+            minmag = "MMAG_EXTRACT"
+            # maxmag = "MMAG_MARK"
+            if minmag not in keys:
+                beamdict[k][minmag] = 99.
+            # if maxmag not in keys:
+            #    beamdict[k][maxmag] = 0.0
             #if "wx" not in keys:
             #    beamdict[k]['wx'] = 0.0
             #if "wy" not in keys:
@@ -223,23 +223,26 @@ def create_grism_config(conffile="",
     displ = []
     dispx = []
     dispy = []
+    mmag = []
     for order in orders:
         # convert the displ wavelengths to microns
-        print(beamdict[order]['DISPL'])
         l1 = beamdict[order]['DISPL'][0] / 10000.
         l2 = beamdict[order]['DISPL'][1] / 10000.
-        displ.append((l1,l2))
+        displ.append((l1, l2))
         dispx.append(beamdict[order]['DISPX'])
         dispy.append(beamdict[order]['DISPY'])
+        mmag.append(beamdict[order]['MMAG_EXTRACT'])
 
     tree['orders'] = orders
     tree['lcoeff'] = displ
     tree['xcoeff'] = dispx
     tree['ycoeff'] = dispy
     tree['wrange'] = wrange
+    tree['mmag_extract'] = mmag
+    print(mmag)
 
     # we need to add the FWCPOS_REF value back in
-    tree['FWCPOS_REF'] = conf['FWCPOS_REF']
+    tree['fwcpos_ref'] = conf['FWCPOS_REF']
 
     fasdf = AsdfFile()
     sdict = {'name': 'nircam_reftools.py',
@@ -249,7 +252,6 @@ def create_grism_config(conffile="",
 
     fasdf.add_history_entry(history, software=sdict)
     fasdf.tree = tree
-
     fasdf.write_to(outname)
 
 
