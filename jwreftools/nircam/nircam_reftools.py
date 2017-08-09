@@ -40,13 +40,34 @@ from astropy import units as u
 import read_siaf_table
 
 
+def common_reference_file_keywords(reftype, title, description, exp_type,
+                                   useafter, author, **kwargs):
+    """
+    exp_type can be also "N/A", or "ANY".
+    """
+    ref_file_common_keywords = {
+        "author": author,
+        "description": description,
+        "exp_type": exp_type,
+        "instrument": {"name": "NIRCAM",
+                       "module": "A",
+                       "pupil": "GRISMC"},
+        "pedigree": "GROUND",
+        "reftype": reftype,
+        "telescope": "JWST",
+        "title": title,
+        "useafter": useafter,
+        }
+
+    ref_file_common_keywords.update(kwargs)
+    return ref_file_common_keywords
+
+
 def create_grism_config(conffile="",
-                        grism="GRISMC",
-                        aperture="GRISM",
-                        module="A",
-                        opgsname="",
+                        pupil=None,
+                        module=None,
                         author="STScI",
-                        history="NIRCAM Grism dispersion references",
+                        history="",
                         outname=""):
     """
     Create an asdf reference file to hold Grism C (column) or Grism R (rows)
@@ -107,28 +128,33 @@ def create_grism_config(conffile="",
     fasdf : asdf.AsdfFile
 
     """
+    if not history:
+        history = "Created from {0:s}".format(conffile)
 
-    tree = {"TITLE": "NIRCAM Grism Configuration",
-            "TELESCOP": "JWST",
-            "MODEL_TYPE": "NIRCAMGrismModel",
-            "PEDIGREE": "GROUND",
-            "REFTYPE": "specwcs",
-            "AUTHOR": author,
-            "MODULE": module,
-            "p_channel": "SHORT|LONG|",
-            "SUBARRAY": opgsname,
-            "DESCRIP": "{0:s} Configuration".format(grism),
-            "EXP_TYPE": {'p_exptype': 'NRC_GRISM', 'type': 'N/A'},
-            "USEAFTER": "2014-01-01T00:00:00",
-            "WAVELENGTH_UNITS": u.micron,
-            }
+    # if pupil is none get from filename like NIRCAM_modB_R.conf
+    if pupil is None:
+        pupil = "GRISM" + conffile.split(".")[0][-1]
+    # if module is none get from filename
+    if module is None:
+        module = conffile.split(".")[0][-3]
 
     if module is "A":
-        tree["INSTRUMENT"] = {'name': 'NIRCAM', 'p_detector': 'NRCA1|NRCA2|NRCA3|NRCA4|NRCA5|'}
+        p_detector = 'NRCA1|NRCA2|NRCA3|NRCA4|NRCALONG|'
     elif module is "B":
-        tree["INSTRUMENT"] = {'name': 'NIRCAM', 'p_detector': 'NRCB1|NRCB2|NRCB3|NRCB4|NRCB5|'}
+        p_detector = 'NRCB1|NRCB2|NRCB3|NRCB4|NRCB5|NRCBLONG|'
     else:
         raise ValueError("Unknown module name specified, should be A or B")
+
+    ref_kw = common_reference_file_keywords("specwcs",
+                                            "NIRCAM Grism Parameters",
+                                            "{0:s} Configuration".format(pupil),
+                                            "NRC_GRISM",
+                                            "2014-01-01T00:00:00",
+                                            author,
+                                            p_channel="SHORT|LONG|",
+                                            p_detector=p_detector,
+                                            model_type="NIRCAMGrismModel",
+                                            wavelength_units=u.micron)
 
     # get all the key-value pairs from the input file
     conf = dict_from_file(conffile)
@@ -258,7 +284,7 @@ def create_grism_config(conffile="",
     mmag = []
 
     for order in orders:
-       # convert the displ wavelengths to microns
+        # convert the displ wavelengths to microns
         l1 = beamdict[order]['DISPL'][0] / 10000.
         l2 = beamdict[order]['DISPL'][1] / 10000.
         displ.append((l1, l2))
@@ -266,22 +292,26 @@ def create_grism_config(conffile="",
         dispy.append(beamdict[order]['DISPY'])
         mmag.append(beamdict[order]['MMAG_EXTRACT'])
 
-    tree['orders'] = orders
-    tree['wrange_selector'] = filters
-    tree['lcoeff'] = displ
-    tree['xcoeff'] = dispx
-    tree['ycoeff'] = dispy
-    tree['wrange'] = wavelengthrange
-    tree['mmag_extract'] = mmag
+    # change the orders into translatable integers
+    # so that we can look up the order with the proper index
+    oo = [int(o) for o in orders]
 
     fasdf = AsdfFile()
-    sdict = {'name': 'nircam_reftools.py',
-             'author': author,
-             'homepage': 'https://github.com/spacetelescope/jwreftools',
-             'version': '0.7'}
+    fasdf.tree = {}
+    fasdf.tree['meta'] = ref_kw
+    fasdf.tree['orders'] = oo
+    fasdf.tree['wrange_selector'] = filters
+    fasdf.tree['lcoeff'] = displ
+    fasdf.tree['xcoeff'] = dispx
+    fasdf.tree['ycoeff'] = dispy
+    fasdf.tree['wrange'] = wavelengthrange
+    fasdf.tree['mmag_extract'] = mmag
 
+    sdict = {'name': 'nircam_reftools.py',
+             'author': 'M. Sosey',
+             'homepage': 'https://github.com/spacetelescope/jwreftools',
+             'version': '0.7.1'}
     fasdf.add_history_entry(history, software=sdict)
-    fasdf.tree = tree
     fasdf.write_to(outname)
 
 
@@ -328,11 +358,10 @@ def create_filter_transmission(filename="",
     channel = 'SHORT'
     if numdet == '5':
         channel = 'LONG'
+        detector = detector[0:4] + 'LONG'
 
     # In the reference file headers, we need to switch NRCA5 to NRCALONG,
     # and the same for module B.
-    if detector[-1] == '5':
-        detector = detector[0:4] + 'LONG'
 
     if not history:
         history = "Created from {0:s}".format(filename)
@@ -459,7 +488,7 @@ def create_nircam_distortion(coefffile, detector, aperture, opgsname, outname):
     if detector[-1] == '5':
         detector = detector[0:4] + 'LONG'
 
-    tree = {"TITLE": "NIRCAM Distortion",
+    meta = {"TITLE": "NIRCAM Distortion",
             "TELESCOP": "JWST",
             "INSTRUMENT": "NIRCAM",
             "PEDIGREE": "GROUND",

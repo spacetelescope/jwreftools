@@ -58,32 +58,18 @@ from astropy.modeling.models import Mapping, Identity
 from astropy.io import fits
 from astropy import units as u
 
-def create_trace_forward_old(outname):
-    """
-    Make a reference file which contains the polynomial models
-    for the NIRISS grism trace
-
-
-    Parameters
-    ----------
-    outname : str
-        The name of the output reference file
-    """
-
-    f = AsdfFile()
-    f.tree = {'model': model}
-    f.write_to(outname)
-
 
 def create_grism_config(conffile="",
-                        grism="Unspecified",
-                        detector="NRS",
-                        history_comment="NIRISS Grism Reference File",
-                        author="spacetelescope",
-                        opgsname="",
+                        fname="GR150C",
+                        pupil="F090W",
+                        history_comment="NIRISS Grism Parameters",
+                        author="STScI",
                         history="",
                         outname=""):
     """
+    pupil is the blocking filter
+    filter is the grism
+
     Create an asdf reference file to hold Grism C (column) or Grism R (rows)
     configuration, no sensativity information is included
 
@@ -136,15 +122,17 @@ def create_grism_config(conffile="",
     fasdf : asdf.AsdfFile
 
     """
-    tree = {"TITLE": "NIRISS Grism Configuration",
+    meta = {"TITLE": "NIRISS Grism Parameters",
             "TELESCOP": "JWST",
-            "INSTRUMENT": "NIRISS",
+            "INSTRUMENT": {"name": "NIRISS",
+                           "pupil": pupil,
+                           "filter": fname},
             "PEDIGREE": "GROUND",
             "REFTYPE": "specwcs",
             "AUTHOR": author,
-            "DETECTOR": detector,
-            "DESCRIP": "{0:s} Configuration".format(grism),
-            "EXP_TYPE": "NRS_WFSS",
+            "DETECTOR": "NIS",
+            "DESCRIP": "{0:s} Model Parameters".format(pupil),
+            "EXP_TYPE": "NIS_WFSS",
             "USEAFTER": "2014-01-01T00:00:00",
             "WAVELENGTH_UNITS": u.micron,
             "MODEL_TYPE": 'NIRISSGrismModel',
@@ -177,7 +165,6 @@ def create_grism_config(conffile="",
 
     # add to the big tree
     # tree['spectral_orders'] = beamdict
-
 
     # add the polynomial model for this file.
     # this structure allows there to be a different polynomial relationship
@@ -233,25 +220,28 @@ def create_grism_config(conffile="",
         dispy.append(beamdict[order]['DISPY'])
         mmag.append(beamdict[order]['MMAG_EXTRACT'])
 
-    tree['orders'] = orders
-    tree['lcoeff'] = displ
-    tree['xcoeff'] = dispx
-    tree['ycoeff'] = dispy
-    tree['wrange'] = wrange
-    tree['mmag_extract'] = mmag
-    print(mmag)
-
-    # we need to add the FWCPOS_REF value back in
-    tree['fwcpos_ref'] = conf['FWCPOS_REF']
+    # change the orders into translatable integer strings
+    # the conf file niriss is giving me are using letter designations
+    beam_lookup = {"A": "+1", "B": "0", "C": "+2", "D": "+3", "E": "-1"}
+    ordermap = [int(beam_lookup[order]) for order in orders]
 
     fasdf = AsdfFile()
-    sdict = {'name': 'nircam_reftools.py',
+    fasdf.tree = {}
+    fasdf.tree['meta'] = meta
+    fasdf.tree['orders'] = ordermap
+    fasdf.tree['lcoeff'] = displ
+    fasdf.tree['xcoeff'] = dispx
+    fasdf.tree['ycoeff'] = dispy
+    fasdf.tree['wrange'] = wrange
+    fasdf.tree['mmag_extract'] = mmag
+    fasdf.tree['fwcpos_ref'] = conf['FWCPOS_REF']
+
+    sdict = {'name': 'niriss_reftools.py',
              'author': author,
              'homepage': 'https://github.com/spacetelescope/jwreftools',
              'version': '0.7'}
 
     fasdf.add_history_entry(history, software=sdict)
-    fasdf.tree = tree
     fasdf.write_to(outname)
 
 
@@ -280,6 +270,7 @@ def read_sensitivity_file(filename):
             if "WAVE" in c:
                 sens["WRANGE"] = [np.min(sens[c]), np.max(sens[c])]
     return sens
+
 
 def split_order_info(keydict):
     """Accumulate keys just for each Beam/order.
@@ -360,7 +351,7 @@ def split_order_info(keydict):
 
 
 def dict_from_file(filename):
-    """Read in a file and return a named tuple of the key value pairs.
+    """Read in a file and return a dict of the key value pairs.
 
     This is a generic read for a text file with the line following format:
 
