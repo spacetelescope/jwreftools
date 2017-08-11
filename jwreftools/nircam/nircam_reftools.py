@@ -48,7 +48,7 @@ from jwst.transforms import jwextension
 
 
 def common_reference_file_keywords(reftype, title, description, exp_type,
-                                   useafter, author, **kwargs):
+                                   useafter, author, module=None, pupil=None, **kwargs):
     """
     exp_type can be also "N/A", or "ANY".
     """
@@ -57,8 +57,8 @@ def common_reference_file_keywords(reftype, title, description, exp_type,
         "description": description,
         "exp_type": exp_type,
         "instrument": {"name": "NIRCAM",
-                       "module": "A",
-                       "pupil": "GRISMC"},
+                       "module": module,
+                       "pupil": pupil},
         "pedigree": "GROUND",
         "reftype": reftype,
         "telescope": "JWST",
@@ -162,7 +162,9 @@ def create_grism_config(conffile="",
                                             model_type="NIRCAMGrismModel",
                                             wavelength_units=u.micron,
                                             input_units=u.micron,
-                                            output_units=u.micron,)
+                                            output_units=u.micron,
+                                            module=module,
+                                            pupil=pupil)
 
     # get all the key-value pairs from the input file
     conf = dict_from_file(conffile)
