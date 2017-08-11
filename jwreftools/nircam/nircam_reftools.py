@@ -33,11 +33,18 @@ a filter in the  filter wheel.   Broader filters yield longer spectra
 """
 import re
 import numpy as np
+import datetime
 from asdf import AsdfFile
+from asdf.tags.core import Software, HistoryEntry
+
 from astropy.io import fits
 from astropy import units as u
+from astropy.modeling.models import Polynomial1D
 
 import read_siaf_table
+from jwst.datamodels import NIRCAMGrismModel
+from jwst.transforms.models import NIRCAMForwardGrismDispersion
+from jwst.transforms import jwextension
 
 
 def common_reference_file_keywords(reftype, title, description, exp_type,
@@ -138,12 +145,12 @@ def create_grism_config(conffile="",
     if module is None:
         module = conffile.split(".")[0][-3]
 
-    if module is "A":
-        p_detector = 'NRCA1|NRCA2|NRCA3|NRCA4|NRCALONG|'
-    elif module is "B":
-        p_detector = 'NRCB1|NRCB2|NRCB3|NRCB4|NRCB5|NRCBLONG|'
-    else:
-        raise ValueError("Unknown module name specified, should be A or B")
+    # if module is "A":
+    #     p_detector = 'NRCA1|NRCA2|NRCA3|NRCA4|NRCALONG|'
+    # elif module is "B":
+    #     p_detector = 'NRCB1|NRCB2|NRCB3|NRCB4|NRCBLONG|'
+    # else:
+    #     raise ValueError("Unknown module name specified, should be A or B")
 
     ref_kw = common_reference_file_keywords("specwcs",
                                             "NIRCAM Grism Parameters",
@@ -151,10 +158,11 @@ def create_grism_config(conffile="",
                                             "NRC_GRISM",
                                             "2014-01-01T00:00:00",
                                             author,
-                                            p_channel="SHORT|LONG|",
-                                            p_detector=p_detector,
+                                            # p_detector=p_detector,
                                             model_type="NIRCAMGrismModel",
-                                            wavelength_units=u.micron)
+                                            wavelength_units=u.micron,
+                                            input_units=u.micron,
+                                            output_units=u.micron,)
 
     # get all the key-value pairs from the input file
     conf = dict_from_file(conffile)
@@ -277,7 +285,7 @@ def create_grism_config(conffile="",
         filters.append(f)
         wavelengthrange.append(w)
 
-    # disp[] per order
+    # dispersion models per order
     displ = []
     dispx = []
     dispy = []
@@ -285,34 +293,44 @@ def create_grism_config(conffile="",
 
     for order in orders:
         # convert the displ wavelengths to microns
-        l1 = beamdict[order]['DISPL'][0] / 10000.
-        l2 = beamdict[order]['DISPL'][1] / 10000.
-        displ.append((l1, l2))
-        dispx.append(beamdict[order]['DISPX'])
-        dispy.append(beamdict[order]['DISPY'])
+        l0 = beamdict[order]['DISPL'][0] / 10000.
+        l1 = beamdict[order]['DISPL'][1] / 10000.
+        # create polynomials for the coefficients of each order
+        lmodel = Polynomial1D(1, c0=-l0/l1, c1=1./l1)
+        displ.append(lmodel)
+        x0, x1 = beamdict[order]['DISPX']
+        xmodel = Polynomial1D(1, c0=x0, c1=x1)
+        dispx.append(xmodel)
+        y0, y1 = beamdict[order]['DISPY']
+        ymodel = Polynomial1D(1, c0=y0, c1=y1)
+        dispy.append(ymodel)
         mmag.append(beamdict[order]['MMAG_EXTRACT'])
 
     # change the orders into translatable integers
     # so that we can look up the order with the proper index
     oo = [int(o) for o in orders]
 
-    fasdf = AsdfFile()
-    fasdf.tree = {}
-    fasdf.tree['meta'] = ref_kw
-    fasdf.tree['orders'] = oo
-    fasdf.tree['wrange_selector'] = filters
-    fasdf.tree['lcoeff'] = displ
-    fasdf.tree['xcoeff'] = dispx
-    fasdf.tree['ycoeff'] = dispy
-    fasdf.tree['wrange'] = wavelengthrange
-    fasdf.tree['mmag_extract'] = mmag
+    full_model = NIRCAMForwardGrismDispersion(oo, displ, dispx, dispy)
 
-    sdict = {'name': 'nircam_reftools.py',
+    ref = NIRCAMGrismModel()
+    ref.meta.update(ref_kw)
+    ref.model = full_model
+    ref.wrange_selector = filters
+    ref.wrange = wavelengthrange
+    ref.mmag_extract = mmag
+    ref.input_units = u.micron
+    ref.output_units = u.micron
+
+    entry = HistoryEntry({'description': history, 'time': datetime.datetime.utcnow()})
+    sdict = Software({'name': 'nircam_reftools.py',
              'author': 'M. Sosey',
              'homepage': 'https://github.com/spacetelescope/jwreftools',
-             'version': '0.7.1'}
-    fasdf.add_history_entry(history, software=sdict)
-    fasdf.write_to(outname)
+             'version': '0.7.1'})
+    entry['sofware'] = sdict
+    ref.history = [entry]
+    ref.to_asdf(outname)
+    ref.validate()
+
 
 
 def create_filter_transmission(filename="",
