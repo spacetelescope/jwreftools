@@ -51,20 +51,52 @@ dispersing elements.
 
 """
 import re
+import datetime
 import numpy as np
-from asdf import AsdfFile
-from astropy.modeling import models
-from astropy.modeling.models import Mapping, Identity
+from asdf.tags.core import Software, HistoryEntry
+from astropy.modeling.models import (Shift, Polynomial1D,
+                                     Polynomial2D)
 from astropy.io import fits
 from astropy import units as u
 
+from jwst.datamodels import NIRISSGrismModel
+from jwst.transforms.models import NIRISSForwardGrismDispersion
+
+
+def common_reference_file_keywords(reftype, author="STScI", exp_type="N/A",
+                                   descrip="NIRISS Reference File",
+                                   title="NIRISS Reference File",
+                                   useafter="2014-01-01T00:00:00",
+                                   fname="", pupil=None, **kwargs):
+    """
+    exp_type can be also "N/A", or "ANY".
+    """
+    ref_file_common_keywords = {
+        "author": author,
+        "description": descrip,
+        "exp_type": exp_type,
+        "instrument": {"name": "NIRISS",
+                       "pupil": pupil,
+                       "filter": fname,
+                       "detector": "NIS"},
+        "pedigree": "GROUND",
+        "reftype": reftype,
+        "telescope": "JWST",
+        "title": title,
+        "useafter": useafter,
+        "input_units": u.micron,
+        "output_units": u.micron,
+        }
+
+    ref_file_common_keywords.update(kwargs)
+    return ref_file_common_keywords
+
 
 def create_grism_config(conffile="",
-                        fname="GR150C",
-                        pupil="F090W",
-                        history_comment="NIRISS Grism Parameters",
+                        fname=None,
+                        pupil=None,
                         author="STScI",
-                        history="",
+                        history="NIRISS Grism Parameters",
                         outname=""):
     """
     pupil is the blocking filter
@@ -99,12 +131,10 @@ def create_grism_config(conffile="",
     ----------
     conffile : str
         The text file with configuration information
-    grism : str
+    pupil : str
         Name of the grism the conffile corresponds to
-    aperture : str
-        Name of the aperture/subarray. (e.g. GRISM_F322W2)
-    opgsname : str
-        Unknown
+    filter : str
+        Name of the filter the conffile corresponds to
     author : str
         The name of the author
     history : str
@@ -113,35 +143,35 @@ def create_grism_config(conffile="",
         Output name for the reference file
 
 
-    Examples
-    --------
-
-
     Returns
     -------
-    fasdf : asdf.AsdfFile
-
+    fasdf : asdf.AsdfFile(jwst.datamodels.NIRISSGrismModel)
     """
-    meta = {"TITLE": "NIRISS Grism Parameters",
-            "TELESCOP": "JWST",
-            "INSTRUMENT": {"name": "NIRISS",
-                           "pupil": pupil,
-                           "filter": fname},
-            "PEDIGREE": "GROUND",
-            "REFTYPE": "specwcs",
-            "AUTHOR": author,
-            "DETECTOR": "NIS",
-            "DESCRIP": "{0:s} Model Parameters".format(pupil),
-            "EXP_TYPE": "NIS_WFSS",
-            "USEAFTER": "2014-01-01T00:00:00",
-            "WAVELENGTH_UNITS": u.micron,
-            "MODEL_TYPE": 'NIRISSGrismModel',
-            }
+
+    if not history:
+        history = "Created from {0:s}".format(conffile)
+
+    # if pupil is none get from filename like NIRCAM_modB_R.conf
+    if pupil is None:
+        pupil = "GRISM" + conffile.split(".")[0][-1]
+    if fname is None:
+        fname = conffile.split(".")[1]
+
+    ref_kw = common_reference_file_keywords(reftype="specwcs",
+                descrip="{0:s} model parameters".format(pupil),
+                exp_type="NIS_WFSS",
+                wavelength_units=u.micron,
+                model_type='NIRISSGrismModel',
+                pupil=pupil,
+                fname=fname,
+                history=history,
+                autor=author,
+                )
 
     # get all the key-value pairs from the input file
     conf = dict_from_file(conffile)
     beamdict = split_order_info(conf)
-    letter = re.compile('^[a-zA-Z0-9]{0,1}$')  # match one only
+    letter = re.compile("^[a-zA-Z0-9]{0,1}$")  # match one only
     etoken = re.compile("^BEAM_[A-Z,a-z]{1,1}")  # find beam key
 
     # add min and max mag info if not provided
@@ -158,9 +188,9 @@ def create_grism_config(conffile="",
                 beamdict[k][minmag] = 99.
             # if maxmag not in keys:
             #    beamdict[k][maxmag] = 0.0
-            #if "wx" not in keys:
+            # if "wx" not in keys:
             #    beamdict[k]['wx'] = 0.0
-            #if "wy" not in keys:
+            # if "wy" not in keys:
             #    beamdict[k]['wy'] = 0.0
 
     # add to the big tree
@@ -213,11 +243,39 @@ def create_grism_config(conffile="",
     mmag = []
     for order in orders:
         # convert the displ wavelengths to microns
-        l1 = beamdict[order]['DISPL'][0] / 10000.
-        l2 = beamdict[order]['DISPL'][1] / 10000.
-        displ.append((l1, l2))
-        dispx.append(beamdict[order]['DISPX'])
-        dispy.append(beamdict[order]['DISPY'])
+        l0 = beamdict[order]['DISPL'][0] / 10000.
+        l1 = beamdict[order]['DISPL'][1] / 10000.
+        # create polynomials for the coefficients of each order
+        displ.append(Polynomial1D(1, c0=-l0/l1, c1=1./l1))
+
+        x0, x1 = beamdict[order]['DISPX']
+        model_c0 = Shift(x0[0])
+        model_c1 = Polynomial2D(2, c0_0=x0[1], c0_1=x0[2], c0_2=x0[3],
+                                               c1_0=x0[4], c1_1=x0[5])
+        model_c2 = Shift(x1[0])
+        model_c3 = Polynomial2D(2, c0_0=x1[1], c0_1=x1[2], c0_2=x1[3],
+                                               c1_0=x1[4], c1_1=x1[5])
+
+        # final result is m1 + t(m2), where t is computed in the model
+        # maybe save a tuple of models for each order
+        m1 = model_c1 | model_c0
+        m2 = model_c3 | model_c2
+        dispx.append((m1, m2))
+
+        x0, x1 = beamdict[order]['DISPY']
+        model_c0 = Shift(x0[0])
+        model_c1 = Polynomial2D(2, c0_0=x0[1], c0_1=x0[2], c0_2=x0[3],
+                                               c1_0=x0[4], c1_1=x0[5])
+        model_c2 = Shift(x1[0])
+        model_c3 = Polynomial2D(2, c0_0=x1[1], c0_1=x1[2], c0_2=x1[3],
+                                               c1_0=x1[4], c1_1=x1[5])
+
+        # final result is m1 + t(m2), where t is computed in the model
+        # maybe save a tuple of models for each order
+        m1 = model_c1 | model_c0
+        m2 = model_c3 | model_c2
+        dispy.append((m1, m2))
+
         mmag.append(beamdict[order]['MMAG_EXTRACT'])
 
     # change the orders into translatable integer strings
@@ -225,24 +283,28 @@ def create_grism_config(conffile="",
     beam_lookup = {"A": "+1", "B": "0", "C": "+2", "D": "+3", "E": "-1"}
     ordermap = [int(beam_lookup[order]) for order in orders]
 
-    fasdf = AsdfFile()
-    fasdf.tree = {}
-    fasdf.tree['meta'] = meta
-    fasdf.tree['orders'] = ordermap
-    fasdf.tree['lcoeff'] = displ
-    fasdf.tree['xcoeff'] = dispx
-    fasdf.tree['ycoeff'] = dispy
-    fasdf.tree['wrange'] = wrange
-    fasdf.tree['mmag_extract'] = mmag
-    fasdf.tree['fwcpos_ref'] = conf['FWCPOS_REF']
+    full_model = NIRISSForwardGrismDispersion(ordermap, displ, dispx, dispy,
+                                    name='nirss_forward_dispersion')
 
-    sdict = {'name': 'niriss_reftools.py',
-             'author': author,
+    # save the reference file
+    ref = NIRISSGrismModel()
+    ref.meta.update(ref_kw)
+    ref.model = full_model
+    ref.wrange = wrange
+    ref.mmag_extract = mmag
+    ref.fwcpos_ref = conf['FWCPOS_REF']
+    ref.input_units = u.micron
+    ref.output_units = u.micron
+
+    entry = HistoryEntry({'description': history, 'time': datetime.datetime.utcnow()})
+    sdict = Software({'name': 'niriss_reftools.py',
+             'author': 'M. Sosey',
              'homepage': 'https://github.com/spacetelescope/jwreftools',
-             'version': '0.7'}
-
-    fasdf.add_history_entry(history, software=sdict)
-    fasdf.write_to(outname)
+             'version': '0.7.1'})
+    entry['sofware'] = sdict
+    ref.history = [entry]
+    ref.to_asdf(outname)
+    ref.validate()
 
 
 def read_sensitivity_file(filename):
@@ -347,7 +409,6 @@ def split_order_info(keydict):
                 del d[k]
 
     return rdict
-
 
 
 def dict_from_file(filename):
