@@ -112,12 +112,10 @@ def create_grism_config(conffile="",
     ----------
     conffile : str
         The text file with configuration information
-    grism : str
+    pupil : str
         Name of the grism the conffile corresponds to
-    aperture : str
-        Name of the aperture/subarray. (e.g. GRISM_F322W2)
-    opgsname : str
-        Unknown
+    module : str
+        Name of the module
     author : str
         The name of the author
     history : str
@@ -125,14 +123,9 @@ def create_grism_config(conffile="",
     outname : str
         Output name for the reference file
 
-
-    Examples
-    --------
-
-
     Returns
     -------
-    fasdf : asdf.AsdfFile
+    fasdf : asdf.AsdfFile(jwst.datamodels.NIRCAMGrismModel)
 
     """
     if not history:
