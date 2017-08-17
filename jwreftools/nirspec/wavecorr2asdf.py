@@ -1,15 +1,18 @@
+import datetime
 from astropy.io import fits
 from astropy.modeling import models
 from astropy import wcs
 import numpy as np
-from jwst.datamodels import WZPCModel
+from asdf.tags.core import HistoryEntry, Software
+from jwst.datamodels import WaveCorrModel
 
 
 ap_names_map = {'A200_1': 'S200A1',
                 'A200_2': 'S200A2',
                 'A400': 'S400A1',
                 'A1600': 'S1600A1',
-                'B200': 'S200B1'
+                'B200': 'S200B1',
+                'MOS': 'MOS'
                 }
 
 
@@ -30,9 +33,9 @@ def _wzpc2asdf(wzpcfile, author, description, useafter):
     return aperture
 
 
-def create_wzpc_refs(wzpc_files, outname=None, author=None, description=None, useafter="2015-11-01"):
+def create_wavecorr_refs(wzpc_files, outname=None, author=None, description=None, useafter="2015-11-01"):
     """
-    Create WZPC reference files.
+    Create WAVECORR reference files (Nirspec wavelength zero-point correction).
 
     Parameters
     ----------
@@ -47,21 +50,20 @@ def create_wzpc_refs(wzpc_files, outname=None, author=None, description=None, us
         Useafter date.
 
     """
-    model = WZPCModel()
+    model = WaveCorrModel()
     aps = []
     if isinstance(wzpc_files, list):
         # Create a reference file for the Fixed Slits mode.
-        f0 = wzpc_files[0]
         model.meta.exposure.type = "NRS_FIXEDSLIT"
         for f in wzpc_files:
             aps.append(_wzpc2asdf(f, author=author, description=description, useafter=useafter))
     elif isinstance(wzpc_files, str):
         model.meta.exposure.type = "NRS_MSASPEC"
-        f0 = wzpc_files
-        aps.append(_wzpc2asdf(wzpc_files, author=author, description=description, useafter=useafter))
+        wzpc_files = [wzpc_files]
+        aps.append(_wzpc2asdf(wzpc_files[0], author=author, description=description, useafter=useafter))
     else:
         raise ValueError("Invalid input - expected a string or a list of strings.")
-
+    f0 = wzpc_files[0]
     model.apertures = aps
     if author is None:
         author = fits.getval(f0, 'AUTHOR')
@@ -77,6 +79,11 @@ def create_wzpc_refs(wzpc_files, outname=None, author=None, description=None, us
     model.meta.origin = fits.getval(f0, 'author')
     model.meta.instrument.p_detector = "NRS1|NRS2|"
 
+    entry = HistoryEntry({'description': "NIRSPEC wavelength zero-point correction.", 'time': datetime.datetime.utcnow()})
+    software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
+                         'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
+    entry['software'] = software
+    model.history = [entry]
     if outname is None:
-        outname = "nirspec_wzpc.asdf"
+        outname = "nirspec_wavecorr.asdf"
     model.to_asdf(outname)
