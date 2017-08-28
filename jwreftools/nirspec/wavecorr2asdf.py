@@ -27,7 +27,8 @@ def _wzpc2asdf(wzpcfile, author, description, useafter):
     f.close()
     
     y, x = np.mgrid[: data.shape[0], : data.shape[1]]
-    X, Y = w.all_pix2world(x, y, 1)
+    # The WCS in the current ref files is 0-based.
+    X, Y = w.all_pix2world(x, y, 0)
     tab = models.Tabular2D(points=(X[0], Y[:,0]), lookup_table=data)
     aperture = {'aperture_name': name, 'variance': var, 'zero_point_offset': tab, 'width': width}
     return aperture
@@ -55,8 +56,11 @@ def create_wavecorr_refs(wzpc_files, outname=None, author=None, description=None
     if isinstance(wzpc_files, list):
         # Create a reference file for the Fixed Slits mode.
         model.meta.exposure.type = "NRS_FIXEDSLIT"
+        model.meta.exposure.p_exptype = "NRS_FIXEDSLIT|NRS_BRIGHTOBJ|NRS_LAMP|"
         for f in wzpc_files:
             aps.append(_wzpc2asdf(f, author=author, description=description, useafter=useafter))
+        if description is None:
+            description = "Wavelength zero-point reference file for Nirspec fixed slits, computed using a simple toy model."
     elif isinstance(wzpc_files, str):
         model.meta.exposure.type = "NRS_MSASPEC"
         wzpc_files = [wzpc_files]
