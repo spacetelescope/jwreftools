@@ -1,3 +1,27 @@
+"""
+Create a Nirspec WAVECORR reference file.
+
+Two reference files should be delivered - one for the MSA
+and one for the fixed slits. The IDT team delivers a separate file for each slit.
+One CRDS ref file is made using the five IDT files.
+
+Examples
+--------
+
+Create the fixed slit ref file.
+
+>>> from jwreftools.nirspec import wavecorr2asdf
+>>> l = ['jwst-nirspec-slit-a1600.wzprf.fits', 'jwst-nirspec-slit-a200-1.wzprf.fits', 
+         'jwst-nirspec-slit-a200-2.wzprf.fits', 'jwst-nirspec-slit-a400.wzprf.fits', 
+         'jwst-nirspec-slit-b200.wzprf.fits']
+>>> wavecorr2asdf.create_wavecorr_refs(l, author='ESA', outname='nirspec_fs_wavecorr.asdf')
+
+Create the MSA ref file:
+
+>>> wavecorr2asdf.create_wavecorr_refs('jwst-nirspec-mos.wzprf.fits', author='ESA',
+        outname='nirspec_mos_wavecorr.asdf')
+
+"""
 import datetime
 from astropy.io import fits
 from astropy.modeling import models
@@ -56,7 +80,7 @@ def create_wavecorr_refs(wzpc_files, outname=None, author=None, description=None
     if isinstance(wzpc_files, list):
         # Create a reference file for the Fixed Slits mode.
         model.meta.exposure.type = "NRS_FIXEDSLIT"
-        model.meta.exposure.p_exptype = "NRS_FIXEDSLIT|NRS_BRIGHTOBJ|NRS_LAMP|"
+        model.meta.exposure.p_exptype = "NRS_FIXEDSLIT|NRS_BRIGHTOBJ|"
         for f in wzpc_files:
             aps.append(_wzpc2asdf(f, author=author, description=description, useafter=useafter))
         if description is None:
