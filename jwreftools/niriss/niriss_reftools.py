@@ -54,39 +54,39 @@ import re
 import datetime
 import numpy as np
 from asdf.tags.core import Software, HistoryEntry
-from astropy.modeling.models import (Shift, Polynomial1D,
-                                     Polynomial2D)
+from astropy.modeling.models import Polynomial2D, Polynomial1D
 from astropy.io import fits
 from astropy import units as u
 
 from jwst.datamodels import NIRISSGrismModel
-from jwst.transforms.models import NIRISSForwardGrismDispersion
+from jwst.datamodels import wcs_ref_models
 
 
 def common_reference_file_keywords(reftype, author="STScI", exp_type="N/A",
                                    descrip="NIRISS Reference File",
                                    title="NIRISS Reference File",
                                    useafter="2014-01-01T00:00:00",
-                                   fname="", pupil=None, **kwargs):
+                                   fname=None, pupil=None, **kwargs):
     """
     exp_type can be also "N/A", or "ANY".
     """
     ref_file_common_keywords = {
-        "author": author,
-        "description": descrip,
-        "exp_type": exp_type,
-        "instrument": {"name": "NIRISS",
-                       "pupil": pupil,
-                       "filter": fname,
-                       "detector": "NIS"},
-        "pedigree": "GROUND",
-        "reftype": reftype,
-        "telescope": "JWST",
-        "title": title,
-        "useafter": useafter,
-        "input_units": u.micron,
-        "output_units": u.micron,
+        "AUTHOR": author,
+        "DESCRIP": descrip,
+        "EXP_TYPE": exp_type,
+        "INSTRUME": "NIRISS",
+        "DETECTOR": "NIS",
+        "PEDIGREE": "GROUND",
+        "REFTYPE": reftype,
+        "TELESCOP": "JWST",
+        "TITLE": title,
+        "USEAFTER": useafter,
         }
+
+    if fname is not None:
+        ref_file_common_keywords["FILTER"] = fname
+    if pupil is not None:
+        ref_file_common_keywords["PUPIL"] = pupil
 
     ref_file_common_keywords.update(kwargs)
     return ref_file_common_keywords
@@ -94,7 +94,7 @@ def common_reference_file_keywords(reftype, author="STScI", exp_type="N/A",
 
 def create_grism_config(conffile="",
                         fname=None,
-                        pupil=None,
+                        pupil="",
                         author="STScI",
                         history="NIRISS Grism Parameters",
                         outname=""):
@@ -152,15 +152,14 @@ def create_grism_config(conffile="",
         history = "Created from {0:s}".format(conffile)
 
     # if pupil is none get from filename like NIRCAM_modB_R.conf
-    if pupil is None:
-        pupil = "GRISM" + conffile.split(".")[0][-1]
-    if fname is None:
-        fname = conffile.split(".")[1]
+    if not fname:
+        fname = conffile.split(".")[0]
+    if not pupil:
+        pupil = conffile.split(".")[1]
 
     ref_kw = common_reference_file_keywords(reftype="specwcs",
-                descrip="{0:s} model parameters".format(pupil),
+                descrip="{0:s} dispersion model parameters".format(pupil),
                 exp_type="NIS_WFSS",
-                wavelength_units=u.micron,
                 model_type='NIRISSGrismModel',
                 pupil=pupil,
                 fname=fname,
@@ -179,13 +178,13 @@ def create_grism_config(conffile="",
     # wx are the wedge offsets for the filters
     # in niriss there's a different grism file for each filter
 
-    for k, bdict in beamdict.items():
-        if isinstance(bdict, dict):
-            keys = bdict.keys()
-            minmag = "MMAG_EXTRACT"
+    # for k, bdict in beamdict.items():
+    #     if isinstance(bdict, dict):
+    #         keys = bdict.keys()
+    #         minmag = "MMAG_EXTRACT"
             # maxmag = "MMAG_MARK"
-            if minmag not in keys:
-                beamdict[k][minmag] = 99.
+            # if minmag not in keys:
+            #     beamdict[k][minmag] = 99.
             # if maxmag not in keys:
             #    beamdict[k][maxmag] = 0.0
             # if "wx" not in keys:
@@ -210,28 +209,6 @@ def create_grism_config(conffile="",
     #     model = models.PolyTraceDispersion(xc, yc, lc, w)
     #     tree['spectral_orders'][order]['model'] = model
 
-    # Filter wavelength ranges from gabe in microns
-    # F090W 0.79 1.03
-    # F115W 0.97 1.32
-    # F140M 1.29 1.52
-    # F150W 1.29 1.71
-    # F158M 1.41 1.74
-    # F200W 1.70 2.28
-    filters = {'F090W': [0.79, 1.03],
-               'F115W': [0.97, 1.32],
-               'F140M': [1.29, 1.52],
-               'F150W': [1.29, 1.71],
-               'F158M': [1.41, 1.74],
-               'F200W': [1.70, 2.28]
-               }
-    # this depends on the filter name being part of the filename for the
-    # input conffile
-    fkeys = filters.keys()
-    for key in fkeys:
-        if key in conffile:
-            wrange = filters[key]
-            break
-
     # The lists below need
     # to remain ordered and referenced by filter or order
     orders = sorted(beamdict.keys())
@@ -240,67 +217,129 @@ def create_grism_config(conffile="",
     displ = []
     dispx = []
     dispy = []
-    mmag = []
+    invdispl = []
+
     for order in orders:
         # convert the displ wavelengths to microns
         l0 = beamdict[order]['DISPL'][0] / 10000.
         l1 = beamdict[order]['DISPL'][1] / 10000.
         # create polynomials for the coefficients of each order
-        displ.append(Polynomial1D(1, c0=-l0/l1, c1=1./l1))
+        invdispl.append(Polynomial1D(1, c0=-l0/l1, c1=1./l1))
+        displ.append(Polynomial1D(1, c0=l0, c1=l1))
 
-        x0, x1 = beamdict[order]['DISPX']
-        model_c0 = Shift(x0[0])
-        model_c1 = Polynomial2D(2, c0_0=x0[1], c0_1=x0[2], c0_2=x0[3],
-                                               c1_0=x0[4], c1_1=x0[5])
-        model_c2 = Shift(x1[0])
-        model_c3 = Polynomial2D(2, c0_0=x1[1], c0_1=x1[2], c0_2=x1[3],
-                                               c1_0=x1[4], c1_1=x1[5])
+        # the dispxy functions here are pulled into a 1D
+        # such that the final poly is ans = x_model + t*y_model
 
-        # final result is m1 + t(m2), where t is computed in the model
-        # maybe save a tuple of models for each order
-        m1 = model_c1 | model_c0
-        m2 = model_c3 | model_c2
-        dispx.append((m1, m2))
+        e0, e1 = beamdict[order]['DISPX']
+        model_x = Polynomial2D(2, c0_0=e0[0], c1_0=e0[1], c2_0=e0[4],
+                               c0_1=e0[2], c1_1=e0[5], c0_2=e0[3])
+        model_y = Polynomial2D(2, c0_0=e1[0], c1_0=e1[1], c2_0=e1[4],
+                               c0_1=e1[2], c1_1=e1[5], c0_2=e1[3])
+        dispx.append((model_x, model_y))
 
-        x0, x1 = beamdict[order]['DISPY']
-        model_c0 = Shift(x0[0])
-        model_c1 = Polynomial2D(2, c0_0=x0[1], c0_1=x0[2], c0_2=x0[3],
-                                               c1_0=x0[4], c1_1=x0[5])
-        model_c2 = Shift(x1[0])
-        model_c3 = Polynomial2D(2, c0_0=x1[1], c0_1=x1[2], c0_2=x1[3],
-                                               c1_0=x1[4], c1_1=x1[5])
-
-        # final result is m1 + t(m2), where t is computed in the model
-        # maybe save a tuple of models for each order
-        m1 = model_c1 | model_c0
-        m2 = model_c3 | model_c2
-        dispy.append((m1, m2))
-
-        mmag.append(beamdict[order]['MMAG_EXTRACT'])
+        e0, e1 = beamdict[order]['DISPY']
+        model_x = Polynomial2D(2, c0_0=e0[0], c1_0=e0[1], c2_0=e0[4],
+                               c0_1=e0[2], c1_1=e0[5], c0_2=e0[3])
+        model_y = Polynomial2D(2, c0_0=e1[0], c1_0=e1[1], c2_0=e1[4],
+                               c0_1=e1[2], c1_1=e1[5], c0_2=e1[3])
+        dispy.append((model_x, model_y))
+        # disp is x_model + t*y_model
+        # invdisp is (t - model_x) / model_y
 
     # change the orders into translatable integer strings
     # the conf file niriss is giving me are using letter designations
     beam_lookup = {"A": "+1", "B": "0", "C": "+2", "D": "+3", "E": "-1"}
     ordermap = [int(beam_lookup[order]) for order in orders]
 
-    full_model = NIRISSForwardGrismDispersion(ordermap, displ, dispx, dispy,
-                                    name='nirss_forward_dispersion')
-
     # save the reference file
     ref = NIRISSGrismModel()
     ref.meta.update(ref_kw)
-    ref.model = full_model
-    ref.wrange = wrange
-    ref.mmag_extract = mmag
+    ref.meta.input_units = u.micron
+    ref.meta.output_units = u.micron
+    ref.dispx = dispx
+    ref.dispy = dispy
+    ref.displ = displ
+    ref.invdispl = invdispl
     ref.fwcpos_ref = conf['FWCPOS_REF']
-    ref.input_units = u.micron
-    ref.output_units = u.micron
-
+    ref.orders = ordermap
     entry = HistoryEntry({'description': history, 'time': datetime.datetime.utcnow()})
     sdict = Software({'name': 'niriss_reftools.py',
-             'author': 'M. Sosey',
-             'homepage': 'https://github.com/spacetelescope/jwreftools',
-             'version': '0.7.1'})
+                      'author': author,
+                      'homepage': 'https://github.com/spacetelescope/jwreftools',
+                      'version': '0.7.1'})
+    entry['sofware'] = sdict
+    ref.history = [entry]
+    ref.to_asdf(outname)
+    ref.validate()
+
+
+def create_grism_waverange(outname="",
+                           history="NIRCAM Grism wavelengthrange",
+                           author="STScI",
+                           module="N/A",
+                           pupil="N/A",
+                           filter_range=None):
+    """Create a wavelengthrange reference file. There is a different file for each filter
+
+    Supply a filter range dictionary or use the default
+
+    """
+    ref_kw = common_reference_file_keywords("wavelengthrange",
+                                            title="NIRISS WFSS waverange",
+                                            exp_type="NIS_WFSS",
+                                            descrip="NIRISS WFSS Filter Wavelength Ranges",
+                                            useafter="2014-01-01T00:00:00",
+                                            author=author,
+                                            model_type="WavelengthrangeModel",
+                                            module=module,
+                                            pupil=None,
+                                            fname=None)
+
+    if filter_range is None:
+        # These numbers from Grabriel Brammer, in microns
+        # There is only one set of ranges because they are
+        # valid for all orders listed, the wavelengthrange
+        # file requires a double array by order, so they
+        # will be replicated for each order, this allows
+        # allows adaptation for future updates per order
+        filter_range = {'F090W': [0.79, 1.03],
+                        'F115W': [0.97, 1.32],
+                        'F140M': [1.29, 1.52],
+                        'F150W': [1.29, 1.71],
+                        'F158M': [1.41, 1.74],
+                        'F200W': [1.70, 2.28]
+                        }
+        orders = [-1, 0, 1, 2, 3]
+    else:
+        # array of integers
+        orders = list(filter_range.keys())
+        orders.sort()
+
+    # same filters for every order, array of strings
+    wrange_selector = list(filter_range.keys())
+    wrange_selector.sort()
+
+    # The lists below need
+    # to remain ordered to be correctly referenced
+    wavelengthrange = []
+    for order in orders:
+        o = []
+        for fname in wrange_selector:
+            o.append(filter_range[fname])
+        wavelengthrange.append(o)
+
+    ref = wcs_ref_models.WavelengthrangeModel()
+    ref.meta.update(ref_kw)
+    ref.meta.input_units = u.micron
+    ref.meta.output_units = u.micron
+    ref.wrange_selector = wrange_selector
+    ref.wrange = wavelengthrange
+    ref.order = orders
+    entry = HistoryEntry({'description': history, 'time': datetime.datetime.utcnow()})
+    sdict = Software({'name': 'niriss_reftools.py',
+                      'author': author,
+                      'homepage': 'https://github.com/spacetelescope/jwreftools',
+                      'version': '0.7.1'})
     entry['sofware'] = sdict
     ref.history = [entry]
     ref.to_asdf(outname)
