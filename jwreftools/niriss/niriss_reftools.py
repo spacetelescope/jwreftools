@@ -62,38 +62,48 @@ from jwst.datamodels import NIRISSGrismModel
 from jwst.datamodels import wcs_ref_models
 
 
-def common_reference_file_keywords(reftype, author="STScI", exp_type="N/A",
-                                   descrip="NIRISS Reference File",
+def common_reference_file_keywords(reftype=None,
+                                   author="STScI",
+                                   exp_type=None,
+                                   description="NIRISS Reference File",
                                    title="NIRISS Reference File",
                                    useafter="2014-01-01T00:00:00",
-                                   fname=None, pupil=None, **kwargs):
+                                   filtername=None,
+                                   filename="",
+                                   pupil=None, **kwargs):
     """
     exp_type can be also "N/A", or "ANY".
     """
+    if exp_type is None:
+        raise ValueError("Expected exp_type")
+    if reftype is None:
+        raise ValueError("Expected reftype")
+
     ref_file_common_keywords = {
-        "AUTHOR": author,
-        "DESCRIP": descrip,
-        "EXP_TYPE": exp_type,
-        "INSTRUME": "NIRISS",
-        "DETECTOR": "NIS",
-        "PEDIGREE": "GROUND",
-        "REFTYPE": reftype,
-        "TELESCOP": "JWST",
-        "TITLE": title,
-        "USEAFTER": useafter,
+        "author": author,
+        "description": description,
+        "exp_type": exp_type,
+        "instrument": {"name": "NIRISS",
+                       "detector": "NIS"},
+        "pedigree": "ground",
+        "reftype": reftype,
+        "telescope": "JWST",
+        "title": title,
+        "useafter": useafter,
+        "filename": filename,
         }
 
-    if fname is not None:
-        ref_file_common_keywords["FILTER"] = fname
+    if filtername is not None:
+        ref_file_common_keywords["instrument"]["filter"] = filtername
     if pupil is not None:
-        ref_file_common_keywords["PUPIL"] = pupil
+        ref_file_common_keywords["instrument"]["pupil"] = pupil
 
     ref_file_common_keywords.update(kwargs)
     return ref_file_common_keywords
 
 
 def create_grism_config(conffile="",
-                        fname=None,
+                        fname="",
                         pupil="",
                         author="STScI",
                         history="NIRISS Grism Parameters",
@@ -158,13 +168,14 @@ def create_grism_config(conffile="",
         pupil = conffile.split(".")[1]
 
     ref_kw = common_reference_file_keywords(reftype="specwcs",
-                descrip="{0:s} dispersion model parameters".format(pupil),
+                description="{0:s} dispersion model parameters".format(pupil),
                 exp_type="NIS_WFSS",
                 model_type='NIRISSGrismModel',
                 pupil=pupil,
-                fname=fname,
+                filtername=fname,
                 history=history,
-                autor=author,
+                author=author,
+                filename=outname,
                 )
 
     # get all the key-value pairs from the input file
@@ -284,16 +295,17 @@ def create_grism_waverange(outname="",
     Supply a filter range dictionary or use the default
 
     """
-    ref_kw = common_reference_file_keywords("wavelengthrange",
+    ref_kw = common_reference_file_keywords(reftype="wavelengthrange",
                                             title="NIRISS WFSS waverange",
                                             exp_type="NIS_WFSS",
-                                            descrip="NIRISS WFSS Filter Wavelength Ranges",
+                                            description="NIRISS WFSS Filter Wavelength Ranges",
                                             useafter="2014-01-01T00:00:00",
                                             author=author,
                                             model_type="WavelengthrangeModel",
                                             module=module,
                                             pupil=None,
-                                            fname=None)
+                                            filename=outname,
+                                            filtername=None)
 
     if filter_range is None:
         # These numbers from Grabriel Brammer, in microns

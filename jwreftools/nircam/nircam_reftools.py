@@ -46,31 +46,41 @@ from jwst.datamodels import NIRCAMGrismModel
 from jwst.datamodels import wcs_ref_models
 
 
-def common_reference_file_keywords(reftype, title, description, exp_type,
-                                   useafter, author, module=None, fname=None,
+def common_reference_file_keywords(reftype=None,
+                                   title=None,
+                                   description=None,
+                                   exp_type=None,
+                                   author="STScI",
+                                   useafter="2014-01-01T00:00:00",
+                                   module=None,
+                                   fname=None,
                                    pupil=None, **kwargs):
     """
     exp_type can be also "N/A", or "ANY".
     """
+    if exp_type is None:
+        raise ValueError("exp_type not set")
+    if reftype is None:
+        raise ValueError("Expected reftype value")
+
     ref_file_common_keywords = {
-        "AUTHOR": author,
-        "DESCRIP": description,
-        "EXP_TYPE": exp_type,
-        "INSTRUME": "NIRCAM",
-        "PEDIGREE": "GROUND",
-        "REFTYPE": reftype,
-        "TELESCOP": "JWST",
-        "TITLE": title,
-        "USEAFTER": useafter,
+        "author": author,
+        "description": description,
+        "exp_type": exp_type,
+        "instrument": {"name": "NIRCAM"},
+        "pedigree": "ground",
+        "reftype": reftype,
+        "telescope": "JWST",
+        "title": title,
+        "useafter": useafter,
         }
 
-
     if fname is not None:
-        ref_file_common_keywords["FILTER"] = fname
+        ref_file_common_keywords["instrument"]["filter"] = fname
     if pupil is not None:
-        ref_file_common_keywords["PUPIL"] = pupil
+        ref_file_common_keywords["instrument"]["pupil"] = pupil
     if module is not None:
-        ref_file_common_keywords["MODULE"] = module
+        ref_file_common_keywords["instrument"]["module"] = module
 
     ref_file_common_keywords.update(kwargs)
     return ref_file_common_keywords
@@ -144,15 +154,16 @@ def create_grism_config(conffile="",
         module = conffile.split(".")[0][-3]
     print("Pupil is {}".format(pupil))
 
-    ref_kw = common_reference_file_keywords("specwcs",
-                                            "NIRCAM Grism Parameters",
-                                            "{0:s} dispersion models".format(pupil),
-                                            "NRC_GRISM",
-                                            "2014-01-01T00:00:00",
-                                            author,
+    ref_kw = common_reference_file_keywords(reftype="specwcs",
+                                            title="NIRCAM Grism Parameters",
+                                            description="{0:s} dispersion models".format(pupil),
+                                            exp_type="NRC_GRISM",
+                                            author=author,
                                             model_type="NIRCAMGrismModel",
                                             module=module,
-                                            pupil=pupil)
+                                            pupil=pupil,
+                                            filename=outname,
+                                            )
 
     # get all the key-value pairs from the input file
     conf = dict_from_file(conffile)
@@ -300,13 +311,13 @@ def create_grism_waverange(outname="",
     Supply a filter range dictionary keyed on order or use the default
 
     """
-    ref_kw = common_reference_file_keywords("wavelengthrange",
-                                            "NIRCAM Grism wavelenghtrange",
-                                            "NIRCAM Grism+Filter Wavelength Ranges",
-                                            "NRC_GRISM",
-                                            "2014-01-01T00:00:00",
-                                            author,
+    ref_kw = common_reference_file_keywords(reftype="wavelengthrange",
+                                            title="NIRCAM Grism wavelenghtrange",
+                                            description="NIRCAM Grism+Filter Wavelength Ranges",
+                                            exp_type="NRC_GRISM",
+                                            author=author,
                                             model_type="WavelengthrangeModel",
+                                            filename=outname,
                                             )
 
     if filter_range is None:
@@ -425,7 +436,6 @@ def create_filter_transmission(filename="",
 
     tree = {"TITLE": "NIRCAM Passband Transmission",
             "TELESCOP": "JWST",
-            "INSTRUME": "NIRCAM",
             "PEDIGREE": "GROUND",
             "REFTYPE": "TRANSMISSION",
             "AUTHOR": author,
