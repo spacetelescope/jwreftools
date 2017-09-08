@@ -82,7 +82,7 @@ def common_reference_file_keywords(reftype=None,
     ref_file_common_keywords = {
         "author": author,
         "description": description,
-        "exp_type": exp_type,
+        "exposure": {"type": exp_type},
         "instrument": {"name": "NIRISS",
                        "detector": "NIS"},
         "pedigree": "ground",
