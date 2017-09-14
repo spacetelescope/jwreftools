@@ -126,11 +126,13 @@ def create_grism_config(conffile="",
     Parameters
     ----------
     conffile : str
-        The text file with configuration information
+        The text file with configuration information, formatted as aXe expects
     pupil : str
         Name of the grism the conffile corresponds to
+        Taken from the conffile name if not specified
     module : str
-        Name of the module
+        Name of the Nircam module
+        Taken from the conffile name if not specified
     author : str
         The name of the author
     history : str
@@ -164,6 +166,7 @@ def create_grism_config(conffile="",
                                             pupil=pupil,
                                             filename=outname,
                                             )
+    
 
     # get all the key-value pairs from the input file
     conf = dict_from_file(conffile)
@@ -282,6 +285,8 @@ def create_grism_config(conffile="",
 
     ref = NIRCAMGrismModel()
     ref.meta.update(ref_kw)
+    # This reference file is good for NRC_GRISM and TSGRISM modes
+    ref.meta.exposure.p_exptype = "NRC_GRISM|NRC_TSGRISM"
     ref.meta.input_units = u.micron
     ref.meta.output_units = u.micron
     ref.displ = displ
@@ -366,6 +371,7 @@ def create_grism_waverange(outname="",
 
     ref = wcs_ref_models.WavelengthrangeModel()
     ref.meta.update(ref_kw)
+    ref.meta.exposure.p_exptype = "NRC_GRISM|NRC_TSGRISM"
     ref.meta.input_units = u.micron
     ref.meta.output_units = u.micron
     ref.wrange_selector = wrange_selector
