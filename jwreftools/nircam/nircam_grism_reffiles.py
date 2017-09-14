@@ -357,6 +357,7 @@ def create_grism_waverange(outname="",
     ref.to_asdf(outname)
     ref.validate()
 
+
 def split_order_info(keydict):
     """
     Designed to take as input the dictionary created by dict_from_file and for
