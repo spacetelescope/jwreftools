@@ -290,7 +290,8 @@ def create_grism_waverange(outname="",
                            author="STScI",
                            module="N/A",
                            pupil="N/A",
-                           filter_range=None):
+                           filter_range=None,
+                           extract_orders=None):
     """Create a wavelengthrange reference file. There is a different file for each filter
 
     Supply a filter range dictionary or use the default
@@ -325,12 +326,26 @@ def create_grism_waverange(outname="",
         orders = [-1, 0, 1, 2, 3]
     else:
         # array of integers
-        orders = list(filter_range.keys())
+        orders = list(np.arange(len(filter_range.keys())))
         orders.sort()
+
+    if extract_orders is None:
+        # These are the orders that will be extracted by
+        # default in the pipeline. It should be a list
+        # of list ordered the same as filter_range 
+        # that says what orders
+        # should be extracted for each filter.
+        # The values that are currently here are those
+        # specified by Kevin Volk via communication.
+        extract_orders = [[1, 2],
+                          [1],
+                          [1],
+                          [1],
+                          [1],
+                          [1]]
 
     # same filters for every order, array of strings
     wrange_selector = list(filter_range.keys())
-    wrange_selector.sort()
 
     # The lists below need
     # to remain ordered to be correctly referenced
@@ -348,6 +363,7 @@ def create_grism_waverange(outname="",
     ref.wrange_selector = wrange_selector
     ref.wrange = wavelengthrange
     ref.order = orders
+    ref.extract_orders = extract_orders
     entry = HistoryEntry({'description': history, 'time': datetime.datetime.utcnow()})
     sdict = Software({'name': 'niriss_reftools.py',
                       'author': author,
