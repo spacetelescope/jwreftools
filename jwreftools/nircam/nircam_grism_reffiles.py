@@ -279,7 +279,8 @@ def create_grism_config(conffile="",
 def create_grism_waverange(outname="",
                            history="Ground NIRCAM Grismwavelengthrange",
                            author="STScI",
-                           filter_range=None):
+                           filter_range=None,
+                           extract_orders=None):
     """Create a wavelengthrange reference file.
 
     Supply a filter range dictionary keyed on order or use the default
@@ -323,11 +324,19 @@ def create_grism_waverange(outname="",
 
     # array of integers
     orders = list(filter_range.keys())
-    orders.sort()
+
+
+    if extract_orders is None:
+        # Nircam has not specified any limitation on the orders
+        # that should be extracted by default yet so all are
+        # included. 
+        extract_orders = []
+        for order in filter_range.keys():
+            for filter in filter_range[order].keys(): 
+                extract_orders.append(orders)
 
     # same filters for every order, array of strings
     wrange_selector = list(filter_range[orders[0]].keys())
-    wrange_selector.sort()
 
     # The lists below need
     # to remain ordered to be correctly referenced
@@ -345,6 +354,7 @@ def create_grism_waverange(outname="",
     ref.meta.output_units = u.micron
     ref.wrange_selector = wrange_selector
     ref.wrange = wavelengthrange
+    ref.extract_orders = extract_orders
     ref.order = orders
 
     entry = HistoryEntry({'description': history, 'time': datetime.datetime.utcnow()})
