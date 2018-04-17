@@ -11,8 +11,8 @@ Examples
 Create the fixed slit ref file.
 
 >>> from jwreftools.nirspec import wavecorr2asdf
->>> l = ['jwst-nirspec-slit-a1600.wzprf.fits', 'jwst-nirspec-slit-a200-1.wzprf.fits', 
-         'jwst-nirspec-slit-a200-2.wzprf.fits', 'jwst-nirspec-slit-a400.wzprf.fits', 
+>>> l = ['jwst-nirspec-slit-a1600.wzprf.fits', 'jwst-nirspec-slit-a200-1.wzprf.fits',
+         'jwst-nirspec-slit-a200-2.wzprf.fits', 'jwst-nirspec-slit-a400.wzprf.fits',
          'jwst-nirspec-slit-b200.wzprf.fits']
 >>> wavecorr2asdf.create_wavecorr_refs(l, author='ESA', outname='nirspec_fs_wavecorr.asdf')
 
@@ -49,7 +49,7 @@ def _wzpc2asdf(wzpcfile, author, description, useafter):
     var = f[2].data
     w = wcs.WCS(f[1].header)
     f.close()
-    
+
     y, x = np.mgrid[: data.shape[0], : data.shape[1]]
     # The WCS in the current ref files is 0-based.
     X, Y = w.all_pix2world(x, y, 0)
@@ -111,7 +111,7 @@ def create_wavecorr_refs(wzpc_files, outname=None, author=None, description=None
     software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
                          'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
     entry['software'] = software
-    model.history = [entry]
+    model.history['entries'] = [entry]
     if outname is None:
         outname = "nirspec_wavecorr.asdf"
     model.to_asdf(outname)

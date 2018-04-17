@@ -280,7 +280,7 @@ def create_grism_config(conffile="",
                       'homepage': 'https://github.com/spacetelescope/jwreftools',
                       'version': '0.7.1'})
     entry['sofware'] = sdict
-    ref.history = [entry]
+    ref.history['entries'] = [entry]
     ref.to_asdf(outname)
     ref.validate()
 
@@ -354,7 +354,7 @@ def create_grism_waverange(outname="",
                       'homepage': 'https://github.com/spacetelescope/jwreftools',
                       'version': '0.7.1'})
     entry['sofware'] = sdict
-    ref.history = [entry]
+    ref.history['entries'] = [entry]
     ref.to_asdf(outname)
     ref.validate()
 

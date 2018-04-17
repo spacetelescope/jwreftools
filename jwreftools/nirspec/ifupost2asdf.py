@@ -125,6 +125,6 @@ def create_ifupost_reference(model_dir, out_name, author=None, description=None,
     software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
                          'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
     entry['software'] = software
-    model.history = [entry]
+    model.history['entries'] = [entry]
     model.to_asdf(out_name)
     model.validate()

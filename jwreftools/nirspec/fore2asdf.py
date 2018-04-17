@@ -54,7 +54,7 @@ def create_fore_reference(refdir, author=None, description=None, useafter=None):
         software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
                              'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
         entry['software'] = software
-        fore_model.history = [entry]
+        fore_model.history['entries'] = [entry]
         fore_model.to_asdf(out_name)
         fore_model.validate()
 
@@ -97,7 +97,7 @@ def create_ifufore_reference(ifufore_refname, out_name, author=None, description
     software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
                          'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
     entry['software'] = software
-    ifufore_model.history = [entry]
+    ifufore_model.history['entries'] = [entry]
     ifufore_model.to_asdf(out_name)
     ifufore_model.validate()
 
