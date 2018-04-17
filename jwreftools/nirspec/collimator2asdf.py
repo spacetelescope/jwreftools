@@ -22,7 +22,7 @@ def collimator2asdf(collimator_refname, author, description, useafter):
     software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
                          'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
     entry['software'] = software
-    collimator_model.history = [entry]
+    collimator_model.history['entries'] = [entry]
 
     return collimator_model
 
