@@ -53,7 +53,7 @@ def ote2asdf(otepcf, author, description, useafter):
     input2poly_mapping.inverse = Identity(2)
 
     # The Nirspec model returns values in degrees.
-    # We are converting them to arcsec in order to use the same V@V# to sky
+    # We are converting them to arcsec in order to use the same V2V3 to sky
     # transform as other instruments.
     unit_transform = models.Scale(3600) & models.Scale(3600)
 
