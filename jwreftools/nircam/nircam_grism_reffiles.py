@@ -9,7 +9,7 @@ from astropy.io import fits
 from astropy import units as u
 from astropy.modeling.models import Polynomial1D
 
-import read_siaf_table
+from . import read_siaf_table
 from jwst.datamodels import NIRCAMGrismModel
 from jwst.datamodels import wcs_ref_models
 
