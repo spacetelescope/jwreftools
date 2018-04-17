@@ -45,10 +45,18 @@ def ifupost2asdf(ifupost_files, author, description, useafter):
         xlines = lines[xcoeff_index + 1: xcoeff_index + 22]
         xcoeff_forward = coeffs_from_pcf(degree, xlines)
         x_poly_forward = models.Polynomial2D(degree, name='ifupost_x_forw', **xcoeff_forward)
+        xlines_distortion = lines[xcoeff_index + 22: xcoeff_index + 43]
+        xcoeff_forward_distortion = coeffs_from_pcf(degree, xlines_distortion)
+        x_poly_forward_distortion = models.Polynomial2D(degree, name="ifupost_x_forwdist",
+                                                         **xcoeff_forward_distortion)
 
         ycoeff_index = lines.index('*yForwardCoefficients 21 2')
         ycoeff_forward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
-        y_poly_forward = models.Polynomial2D(degree, name='ifupost_Y_forw', **ycoeff_forward)
+        y_poly_forward = models.Polynomial2D(degree, name='ifupost_y_forw', **ycoeff_forward)
+        ylines_distortion = lines[ycoeff_index + 22: ycoeff_index + 43]
+        ycoeff_forward_distortion = coeffs_from_pcf(degree, ylines_distortion)
+        y_poly_forward_distortion = models.Polynomial2D(degree, name="ifupost_y_forwdist",
+                                                     **ycoeff_forward_distortion)
 
         xcoeff_index = lines.index('*xBackwardCoefficients 21 2')
         xcoeff_backward = coeffs_from_pcf(degree, lines[xcoeff_index + 1: xcoeff_index + 22])
@@ -58,14 +66,20 @@ def ifupost2asdf(ifupost_files, author, description, useafter):
         ycoeff_backward = coeffs_from_pcf(degree, lines[ycoeff_index + 1: ycoeff_index + 22])
         y_poly_backward = models.Polynomial2D(degree, name='ifupost_y_back', **ycoeff_backward)
 
+        x_poly_forward.inverse = x_poly_backward
+        y_poly_forward.inverse = y_poly_backward
+
         output2poly_mapping = Identity(2, name='ifupost_outmap')
-        output2poly_mapping.inverse = Mapping([0, 1, 0, 1])
-        input2poly_mapping = Mapping([0, 1, 0, 1], name='ifupost_inmap')
+        output2poly_mapping.inverse = Mapping([0, 1, 2, 0, 1, 2])
+        input2poly_mapping = Mapping([0, 1, 2, 0, 1, 2], name='ifupost_inmap')
         input2poly_mapping.inverse = Identity(2)
 
-        model_poly = input2poly_mapping | (x_poly_forward & y_poly_forward) | output2poly_mapping
-
-        model = linear_sky2det | model_poly
+        model = {'linear': linear_sky2det,
+                 'xpoly': x_poly_forward,
+                 'xpoly_distortion': x_poly_forward_distortion,
+                 'ypoly': y_poly_forward,
+                 'ypoly_distortion': y_poly_forward_distortion
+                 }
         name = "slice_{0}".format(n)
         setattr(ifupost_model, name, model)
 
@@ -76,23 +90,24 @@ def ifupost2asdf(ifupost_files, author, description, useafter):
     return ifupost_model
 
 
-
-#if __name__ == '__main__':
-#    import argpars
-#    parser = argpare.ArgumentParser(description="Creates NIRSpec 'ifupost' reference file in ASDF format.")
-#    parser.add_argument("ifupost_file_list", type=(list, str), help="IFUPOST file list or directory with IFUPOST files.")
-#    parser.add_argument("output_name", type=str, help="Output file name")
-#    res = parser.parse_args()
-#    if res.output_name is None:
-#        output_name = "nirspec_ifupost.asdf"
-#    else:
-#        output_name = res.output_name
-#    ref_kw = common_reference_file_keywords(reftype="ifupost", title="NIRSPEC IFU-POST transforms - CDP4",
-#                                           description="Cold design IFU transform, cout x+y fitted with FF/Argon/IMA exposures.",
-#                                            exp_type="NRS_IFU", useafter=useafter, author=author,
-#                                            filename=ifupost_name)
-
 def create_ifupost_reference(model_dir, out_name, author=None, description=None, useafter=None):
+    """
+    Create the IFUPOST reference.
+
+    Parameters
+    ----------
+    model_dir : str
+        Directory with the model. it should contain a
+        subdirectory ``CoordTransform``.
+    out_name : str
+        Name for the reference file.
+    author : str
+        Author field.
+    description : str
+        Consice description of the file.
+    useafter : str
+        A useafter date in ISO format.
+    """
     model_dir = os.path.join(model_dir, "CoordTransform", "IFU")
     ifupost_list = glob.glob(model_dir + '/IFU-POST*')
     f = open(ifupost_list[0])
