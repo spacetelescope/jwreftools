@@ -52,7 +52,12 @@ def ote2asdf(otepcf, author, description, useafter):
     input2poly_mapping = Mapping([0, 1, 0, 1], name='ote_inmap')
     input2poly_mapping.inverse = Identity(2)
 
-    model_poly = input2poly_mapping | (x_poly_forward & y_poly_forward) | output2poly_mapping
+    # The Nirspec model returns values in degrees.
+    # We are converting them to arcsec in order to use the same V@V# to sky
+    # transform as other instruments.
+    unit_transform = models.Scale(3600) & models.Scale(3600)
+
+    model_poly = input2poly_mapping | (x_poly_forward & y_poly_forward) | output2poly_mapping | unit_transform
 
     model = model_poly | mlinear
     ote_model = OTEModel()
