@@ -20,7 +20,8 @@ def ote2asdf(otepcf, author, description, useafter):
     input_rot_center = lines[lines.index('*InputRotationCentre 2 1') + 1].split()
     output_rot_center = lines[lines.index('*OutputRotationCentre 2 1') + 1].split()
 
-    mlinear = homothetic_det2sky(input_rot_center, rotation_angle, factors, output_rot_center, name="ote")
+    mlinear = homothetic_det2sky(input_rot_center, rotation_angle,
+                                 factors, output_rot_center, name="ote")
 
     degree = int(lines[lines.index('*FitOrder') + 1])
 
@@ -57,15 +58,16 @@ def ote2asdf(otepcf, author, description, useafter):
     # transform as other instruments.
     unit_transform = models.Scale(3600) & models.Scale(3600)
 
-    model_poly = input2poly_mapping | (x_poly_forward & y_poly_forward) | output2poly_mapping | unit_transform
+    model_poly = input2poly_mapping | (x_poly_forward & y_poly_forward) | output2poly_mapping
 
-    model = model_poly | mlinear
+    model = model_poly | mlinear | unit_transform
     ote_model = OTEModel()
     ote_model.model = model
     ote_model.meta.author = author
     ote_model.meta.description = description
     ote_model.meta.useafter = useafter
     ote_model.meta.pedigree = "GROUND"
+    ote_model.meta.output_units = 'arcsec'
     return ote_model
 
 
