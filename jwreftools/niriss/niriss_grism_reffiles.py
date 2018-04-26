@@ -54,13 +54,17 @@ dispersing elements.
 import re
 import datetime
 import numpy as np
+from collections import OrderedDict
+
 from asdf.tags.core import Software, HistoryEntry
 from astropy.modeling.models import Polynomial2D, Polynomial1D
 from astropy.io import fits
 from astropy import units as u
 
+
+
 from jwst.datamodels import NIRISSGrismModel
-from jwst.datamodels import wcs_ref_models
+from jwst.datamodels import wcs_ref_models, util
 
 
 def common_reference_file_keywords(reftype=None,
@@ -194,15 +198,15 @@ def create_grism_config(conffile="",
     #     if isinstance(bdict, dict):
     #         keys = bdict.keys()
     #         minmag = "MMAG_EXTRACT"
-            # maxmag = "MMAG_MARK"
-            # if minmag not in keys:
-            #     beamdict[k][minmag] = 99.
-            # if maxmag not in keys:
-            #    beamdict[k][maxmag] = 0.0
-            # if "wx" not in keys:
-            #    beamdict[k]['wx'] = 0.0
-            # if "wy" not in keys:
-            #    beamdict[k]['wy'] = 0.0
+    # maxmag = "MMAG_MARK"
+    # if minmag not in keys:
+    #     beamdict[k][minmag] = 99.
+    # if maxmag not in keys:
+    #    beamdict[k][maxmag] = 0.0
+    # if "wx" not in keys:
+    #    beamdict[k]['wx'] = 0.0
+    # if "wy" not in keys:
+    #    beamdict[k]['wy'] = 0.0
 
     # add to the big tree
     # tree['spectral_orders'] = beamdict
@@ -273,13 +277,13 @@ def create_grism_config(conffile="",
     ref.displ = displ
     ref.invdispl = invdispl
     ref.fwcpos_ref = conf['FWCPOS_REF']
-    ref.orders = ordermap
+    ref.order = ordermap
     entry = HistoryEntry({'description': history, 'time': datetime.datetime.utcnow()})
     sdict = Software({'name': 'niriss_reftools.py',
                       'author': author,
                       'homepage': 'https://github.com/spacetelescope/jwreftools',
                       'version': '0.7.1'})
-    entry['sofware'] = sdict
+    entry['software'] = sdict
     ref.history['entries'] = [entry]
     ref.to_asdf(outname)
     ref.validate()
@@ -316,23 +320,25 @@ def create_grism_waverange(outname="",
         # file requires a double array by order, so they
         # will be replicated for each order, this allows
         # allows adaptation for future updates per order
-        filter_range = {'F090W': [0.79, 1.03],
-                        'F115W': [0.97, 1.32],
-                        'F140M': [1.29, 1.52],
-                        'F150W': [1.29, 1.71],
-                        'F158M': [1.41, 1.74],
-                        'F200W': [1.70, 2.28]
-                        }
-        orders = [-1, 0, 1, 2, 3]
+        tdict = {'F090W': [0.79, 1.03],
+                 'F115W': [0.97, 1.32],
+                 'F140M': [1.29, 1.52],
+                 'F150W': [1.29, 1.71],
+                 'F158M': [1.41, 1.74],
+                 'F200W': [1.70, 2.28]
+                 }
+        filter_range = OrderedDict(sorted(tdict.items(),
+                                          key=lambda f: f[1]))
+
+        orders = [-1, 0, 1, 2, 3]  # orders available
     else:
         # array of integers
         orders = list(np.arange(len(filter_range.keys())))
-        orders.sort()
 
     if extract_orders is None:
         # These are the orders that will be extracted by
         # default in the pipeline. It should be a list
-        # of list ordered the same as filter_range 
+        # of list ordered the same as filter_range
         # that says what orders
         # should be extracted for each filter.
         # The values that are currently here are those
@@ -364,12 +370,15 @@ def create_grism_waverange(outname="",
     ref.wrange = wavelengthrange
     ref.order = orders
     ref.extract_orders = extract_orders
+
+    # create the history entries
     entry = HistoryEntry({'description': history, 'time': datetime.datetime.utcnow()})
+
     sdict = Software({'name': 'niriss_reftools.py',
                       'author': author,
                       'homepage': 'https://github.com/spacetelescope/jwreftools',
                       'version': '0.7.1'})
-    entry['sofware'] = sdict
+    entry['software'] = sdict
     ref.history['entries'] = [entry]
     ref.to_asdf(outname)
     ref.validate()

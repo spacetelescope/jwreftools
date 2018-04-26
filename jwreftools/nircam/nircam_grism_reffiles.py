@@ -1,18 +1,16 @@
 
 import re
-import numpy as np
 import datetime
-from asdf import AsdfFile
+from collections import OrderedDict
+
 from asdf.tags.core import Software, HistoryEntry
 
-from astropy.io import fits
 from astropy import units as u
 from astropy.modeling.models import Polynomial1D
 
 from . import read_siaf_table
 from jwst.datamodels import NIRCAMGrismModel
 from jwst.datamodels import wcs_ref_models
-
 
 
 def common_reference_file_keywords(reftype=None,
@@ -80,8 +78,8 @@ def create_grism_config(conffile="",
     information (wx,wy) is included in the conf file in one of the key-value
     pairs, where the key includes the beam designation
 
-     this reference file also contains the polynomial model which is appropriate
-     for the coefficients which are listed.
+     this reference file also contains the polynomial model which is
+     appropriate for the coefficients which are listed.
      wavelength = DISPL(order,x0,y0,t)
      dx = DISPX(order,x0,y0,t)
      dy = DISPY(order,x0,y0,t)
@@ -136,7 +134,6 @@ def create_grism_config(conffile="",
                                             filename=outname,
                                             )
 
-
     # get all the key-value pairs from the input file
     conf = dict_from_file(conffile)
     beamdict = split_order_info(conf)
@@ -148,13 +145,6 @@ def create_grism_config(conffile="",
     etoken = re.compile("^[a-zA-Z]*_(?:[+\-]){1,1}[1,2]{1,1}")  # find beam key
     for b, bdict in beamdict.items():
             temp[b] = dict()
-            # for key in bdict:
-                # if 'SENSITIVITY' in key:
-                #     print("Reading sensitivity from: {0:s}".format(bdict[key]))
-                #     sdata = read_sensitivity_file(bdict[key])
-                #     skeys = sdata.keys()
-                #     for k in skeys:
-                #         temp[b][key+"_"+k] = sdata[k]
 
     # add the new beam information to beamdict and remove spurious beam info
     for k in temp:
@@ -162,25 +152,6 @@ def create_grism_config(conffile="",
             if etoken.match(kk):
                 kk = kk.replace("_{}".format(k), "")
             beamdict[k][kk] = temp[k][kk]
-
-    # add min and max mag info if not provided
-    # also make beam coeff lists
-    # wx are the wedge offsets for the filters
-
-    # for k, bdict in beamdict.items():
-    #     if isinstance(bdict, dict):
-    #         keys = bdict.keys()
-    #         if "MMAG_EXTRACT" not in keys:
-    #             beamdict[k]["MMAG_EXTRACT"] = 99.0
-            # if maxmag not in keys:
-            #    beamdict[k][maxmag] = 0.0
-            # if "wx" not in keys:
-            #    beamdict[k]['wx'] = 0.0
-            # if "wy" not in keys:
-            #    beamdict[k]['wy'] = 0.0
-            # add the model for transforms
-
-
 
     # for NIRCAM, the R and C grism coefficients contain zeros where
     # the dispersion is in the opposite direction. Meaning, the GRISMR,
@@ -190,12 +161,13 @@ def create_grism_config(conffile="",
     # There are separate reference files for each grism. Depending on the grism
     # dispersion direction you either want to use the dx from source center or
     # the dy from source center in the inverse dispersion relationship which is
-    # used to calculate the t value needed to calculate the wavelength at that pixel.
-    #
-    # The model creation here takes all of this into account by looking at the GRISM[R/C]
-    # the file is used for and creating a reference model with the appropriate dispersion
-    # direction in use. This eliminates having to decide which direction to calculate
-    # the dispersion from given the input x,y pixel in the dispersed image.
+    # used to calculate the t value needed to calculate the wavelength at that
+    # pixel.
+    # The model creation here takes all of this into account by looking at the
+    # GRISM[R/C] the file is used for and creating a reference model with the
+    # appropriate dispersion direction in use. This eliminates having to decide
+    # which direction to calculatethe dispersion from given the input x,y
+    # pixel in the dispersed image.
     orders = beamdict.keys()
 
     # dispersion models valid per order and direction saved to reference file
@@ -209,7 +181,8 @@ def create_grism_config(conffile="",
     dispy = []
 
     for order in orders:
-        # convert the displ wavelengths to microns if the input file is still in angstroms
+        # convert the displ wavelengths to microns if the input
+        # file is still in angstroms
         l0 = beamdict[order]['DISPL'][0] / 10000.
         l1 = beamdict[order]['DISPL'][1] / 10000.
 
@@ -264,13 +237,14 @@ def create_grism_config(conffile="",
     ref.invdispx = invdispx
     ref.invdispy = invdispy
     ref.invdispl = invdispl
-    ref.orders = oo
-    entry = HistoryEntry({'description': history, 'time': datetime.datetime.utcnow()})
+    ref.order = oo
+    entry = HistoryEntry({'description': history,
+                          'time': datetime.datetime.utcnow()})
     sdict = Software({'name': 'nircam_reftools.py',
              'author': author,
              'homepage': 'https://github.com/spacetelescope/jwreftools',
              'version': '0.7.1'})
-    entry['sofware'] = sdict
+    entry['software'] = sdict
     ref.history['entries'] = [entry]
     ref.to_asdf(outname)
     ref.validate()
@@ -297,45 +271,46 @@ def create_grism_waverange(outname="",
 
     if filter_range is None:
         # These numbers from Nor Pirzkal, in microns
-        filter_range = {1: {'F250M': [2.500411072, 4.800260833],
-                            'F277W': [2.500411072, 3.807062006],
-                            'F300M': [2.684896869, 4.025318456],
-                            'F322W2': [2.5011293930000003, 4.215842089],
-                            'F335M': [3.01459734, 4.260432726],
-                            'F356W': [3.001085025, 4.302320901],
-                            'F360M': [3.178096344, 4.00099629],
-                            'F410M': [3.6267051809999997, 4.5644598],
-                            'F430M': [4.04828939, 4.511761774],
-                            'F444W': [3.696969216, 4.899565197],
-                            'F460M': [3.103778615, 4.881999188],
-                            'F480M': [4.5158154679999996, 4.899565197]},
-                        2: {'F250M': [2.500411072, 2.667345336],
-                            'F277W': [2.500411072, 3.2642254050000004],
-                            'F300M': [2.6659796289999997, 3.2997071729999994],
-                            'F322W2': [2.5011293930000003, 4.136119434],
-                            'F335M': [2.54572003, 3.6780519760000003],
-                            'F356W': [2.529505253, 4.133416971],
-                            'F360M': [2.557881113, 4.83740855],
-                            'F410M': [2.5186954019999996, 4.759037127],
-                            'F430M': [2.5362614100000003, 4.541488865],
-                            'F444W': [2.5011293930000003, 4.899565197],
-                            'F460M': [2.575447122, 4.883350419],
-                            'F480M': [2.549773725, 4.899565197]}}
+        tdict = {1: {'F250M': [2.500411072, 4.800260833],
+                     'F277W': [2.500411072, 3.807062006],
+                     'F300M': [2.684896869, 4.025318456],
+                     'F322W2': [2.5011293930000003, 4.215842089],
+                     'F335M': [3.01459734, 4.260432726],
+                     'F356W': [3.001085025, 4.302320901],
+                     'F360M': [3.178096344, 4.00099629],
+                     'F410M': [3.6267051809999997, 4.5644598],
+                     'F430M': [4.04828939, 4.511761774],
+                     'F444W': [3.696969216, 4.899565197],
+                     'F460M': [3.103778615, 4.881999188],
+                     'F480M': [4.5158154679999996, 4.899565197]},
+                 2: {'F250M': [2.500411072, 2.667345336],
+                     'F277W': [2.500411072, 3.2642254050000004],
+                     'F300M': [2.6659796289999997, 3.2997071729999994],
+                     'F322W2': [2.5011293930000003, 4.136119434],
+                     'F335M': [2.54572003, 3.6780519760000003],
+                     'F356W': [2.529505253, 4.133416971],
+                     'F360M': [2.557881113, 4.83740855],
+                     'F410M': [2.5186954019999996, 4.759037127],
+                     'F430M': [2.5362614100000003, 4.541488865],
+                     'F444W': [2.5011293930000003, 4.899565197],
+                     'F460M': [2.575447122, 4.883350419],
+                     'F480M': [2.549773725, 4.899565197]}}
 
+    filter_range = OrderedDict(sorted(tdict.items(),
+                                      key=lambda f: f[0]))
     # array of integers
     orders = list(filter_range.keys())
-
 
     if extract_orders is None:
         # Nircam has not specified any limitation on the orders
         # that should be extracted by default yet so all are
-        # included. 
+        # included.
         extract_orders = []
         for order in filter_range.keys():
-            for filter in filter_range[order].keys(): 
+            for filter in filter_range[order].keys():
                 extract_orders.append(orders)
 
-    # same filters for every order, array of strings
+    # filters for every order
     wrange_selector = list(filter_range[orders[0]].keys())
 
     # The lists below need
@@ -357,7 +332,8 @@ def create_grism_waverange(outname="",
     ref.extract_orders = extract_orders
     ref.order = orders
 
-    entry = HistoryEntry({'description': history, 'time': datetime.datetime.utcnow()})
+    entry = HistoryEntry({'description': history,
+                          'time': datetime.datetime.utcnow()})
     sdict = Software({'name': 'nircam_reftools.py',
                       'author': author,
                       'homepage': 'https://github.com/spacetelescope/jwreftools',
