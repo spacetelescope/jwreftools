@@ -250,7 +250,7 @@ def create_grism_config(conffile="",
     ref.validate()
 
 
-def create_grism_waverange(outname="",
+def create_grism_wavelengthrange(outname="",
                            history="Ground NIRCAM Grismwavelengthrange",
                            author="STScI",
                            filter_range=None,
@@ -311,14 +311,14 @@ def create_grism_waverange(outname="",
                 extract_orders.append(orders)
 
     # filters for every order
-    wrange_selector = list(filter_range[orders[0]].keys())
+    waverange_selector = list(filter_range[orders[0]].keys())
 
     # The lists below need
     # to remain ordered to be correctly referenced
     wavelengthrange = []
     for order in orders:
         o = []
-        for fname in wrange_selector:
+        for fname in waverange_selector:
             o.append(filter_range[order][fname])
         wavelengthrange.append(o)
 
@@ -327,8 +327,8 @@ def create_grism_waverange(outname="",
     ref.meta.exposure.p_exptype = "NRC_GRISM|NRC_TSGRISM"
     ref.meta.input_units = u.micron
     ref.meta.output_units = u.micron
-    ref.wrange_selector = wrange_selector
-    ref.wrange = wavelengthrange
+    ref.waverange_selector = waverange_selector
+    ref.wavelengthrange = wavelengthrange
     ref.extract_orders = extract_orders
     ref.order = orders
 
