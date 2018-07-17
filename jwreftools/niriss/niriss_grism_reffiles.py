@@ -289,7 +289,7 @@ def create_grism_config(conffile="",
     ref.validate()
 
 
-def create_grism_waverange(outname="",
+def create_grism_wavelengthrange(outname="",
                            history="NIRCAM Grism wavelengthrange",
                            author="STScI",
                            module="N/A",
@@ -302,7 +302,7 @@ def create_grism_waverange(outname="",
 
     """
     ref_kw = common_reference_file_keywords(reftype="wavelengthrange",
-                                            title="NIRISS WFSS waverange",
+                                            title="NIRISS WFSS wavelengthrange",
                                             exp_type="NIS_WFSS",
                                             description="NIRISS WFSS Filter Wavelength Ranges",
                                             useafter="2014-01-01T00:00:00",
@@ -351,14 +351,14 @@ def create_grism_waverange(outname="",
                           [1]]
 
     # same filters for every order, array of strings
-    wrange_selector = list(filter_range.keys())
+    waverange_selector = list(filter_range.keys())
 
     # The lists below need
     # to remain ordered to be correctly referenced
     wavelengthrange = []
     for order in orders:
         o = []
-        for fname in wrange_selector:
+        for fname in waverange_selector:
             o.append(filter_range[fname])
         wavelengthrange.append(o)
 
@@ -366,8 +366,8 @@ def create_grism_waverange(outname="",
     ref.meta.update(ref_kw)
     ref.meta.input_units = u.micron
     ref.meta.output_units = u.micron
-    ref.wrange_selector = wrange_selector
-    ref.wrange = wavelengthrange
+    ref.waverange_selector = waverange_selector
+    ref.wavelengthrange = wavelengthrange
     ref.order = orders
     ref.extract_orders = extract_orders
 
