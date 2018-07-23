@@ -1,14 +1,12 @@
 
 import re
 import datetime
-from collections import OrderedDict
 
 from asdf.tags.core import Software, HistoryEntry
 
 from astropy import units as u
 from astropy.modeling.models import Polynomial1D
 
-from . import read_siaf_table
 from jwst.datamodels import NIRCAMGrismModel
 from jwst.datamodels import wcs_ref_models
 
@@ -58,7 +56,7 @@ def create_grism_config(conffile="",
                         module=None,
                         author="STScI",
                         history="",
-                        outname=""):
+                        outname=None):
     """
     Create an asdf reference file to hold Grism C (column) or Grism R (rows)
     configuration, no sensativity information is included
@@ -112,6 +110,8 @@ def create_grism_config(conffile="",
     fasdf : asdf.AsdfFile(jwst.datamodels.NIRCAMGrismModel)
 
     """
+    if outname is None:
+        outname = "nircam_wfss_wavelengthrange.asdf"
     if not history:
         history = "Created from {0:s}".format(conffile)
 
@@ -126,7 +126,7 @@ def create_grism_config(conffile="",
     ref_kw = common_reference_file_keywords(reftype="specwcs",
                                             title="NIRCAM Grism Parameters",
                                             description="{0:s} dispersion models".format(pupil),
-                                            exp_type="NRC_GRISM",
+                                            exp_type="NRC_WFSS",
                                             author=author,
                                             model_type="NIRCAMGrismModel",
                                             module=module,
@@ -227,8 +227,8 @@ def create_grism_config(conffile="",
 
     ref = NIRCAMGrismModel()
     ref.meta.update(ref_kw)
-    # This reference file is good for NRC_GRISM and TSGRISM modes
-    ref.meta.exposure.p_exptype = "NRC_GRISM|NRC_TSGRISM"
+    # This reference file is good for NRC_WFSS and TSGRISM modes
+    ref.meta.exposure.p_exptype = "NRC_WFSS|NRC_TSGRISM"
     ref.meta.input_units = u.micron
     ref.meta.output_units = u.micron
     ref.displ = displ
@@ -238,108 +238,111 @@ def create_grism_config(conffile="",
     ref.invdispy = invdispy
     ref.invdispl = invdispl
     ref.order = oo
-    entry = HistoryEntry({'description': history,
-                          'time': datetime.datetime.utcnow()})
-    sdict = Software({'name': 'nircam_reftools.py',
-             'author': author,
-             'homepage': 'https://github.com/spacetelescope/jwreftools',
-             'version': '0.7.1'})
-    entry['software'] = sdict
-    ref.history['entries'] = [entry]
+    history = HistoryEntry({'description': history,
+                            'time': datetime.datetime.utcnow()})
+    software = Software({'name': 'nircam_reftools.py',
+                         'author': author,
+                         'homepage': 'https://github.com/spacetelescope/jwreftools',
+                         'version': '0.7.1'})
+    history['software'] = software
+    ref.history = [history]
     ref.to_asdf(outname)
     ref.validate()
 
 
-def create_grism_wavelengthrange(outname="",
-                           history="Ground NIRCAM Grismwavelengthrange",
-                           author="STScI",
-                           filter_range=None,
-                           extract_orders=None):
-    """Create a wavelengthrange reference file.
+def create_grism_wavelengthrange(outname="nircam_grism_wavelengthrange.asdf",
+                                 history="Ground NIRCAM Grism wavelengthrange",
+                                 author="STScI",
+                                 wavelengthrange=None,
+                                 extract_orders=None):
+    """Create a wavelengthrange reference file for NIRCAM.
 
-    Supply a filter range dictionary keyed on order or use the default
+    Parameters
+    ----------
+    outname: str
+        The output name of the file
+    history: str
+        History information about it's creation
+    author: str
+        Person or entity making the file
+    wavelengthrange: list(tuples)
+        A list of tuples that set the order, filter, and
+        wavelength range min and max
+    extract_orders: list[list]
+        A list of lists that specify
 
     """
     ref_kw = common_reference_file_keywords(reftype="wavelengthrange",
                                             title="NIRCAM Grism wavelenghtrange",
-                                            description="NIRCAM Grism+Filter Wavelength Ranges",
-                                            exp_type="NRC_GRISM",
+                                            description="NIRCAM Grism-Filter Wavelength Ranges",
+                                            exp_type="NRC_WFSS",
                                             author=author,
                                             model_type="WavelengthrangeModel",
                                             filename=outname,
                                             )
 
-    if filter_range is None:
-        # These numbers from Nor Pirzkal, in microns
-        tdict = {1: {'F250M': [2.500411072, 4.800260833],
-                     'F277W': [2.500411072, 3.807062006],
-                     'F300M': [2.684896869, 4.025318456],
-                     'F322W2': [2.5011293930000003, 4.215842089],
-                     'F335M': [3.01459734, 4.260432726],
-                     'F356W': [3.001085025, 4.302320901],
-                     'F360M': [3.178096344, 4.00099629],
-                     'F410M': [3.6267051809999997, 4.5644598],
-                     'F430M': [4.04828939, 4.511761774],
-                     'F444W': [3.696969216, 4.899565197],
-                     'F460M': [3.103778615, 4.881999188],
-                     'F480M': [4.5158154679999996, 4.899565197]},
-                 2: {'F250M': [2.500411072, 2.667345336],
-                     'F277W': [2.500411072, 3.2642254050000004],
-                     'F300M': [2.6659796289999997, 3.2997071729999994],
-                     'F322W2': [2.5011293930000003, 4.136119434],
-                     'F335M': [2.54572003, 3.6780519760000003],
-                     'F356W': [2.529505253, 4.133416971],
-                     'F360M': [2.557881113, 4.83740855],
-                     'F410M': [2.5186954019999996, 4.759037127],
-                     'F430M': [2.5362614100000003, 4.541488865],
-                     'F444W': [2.5011293930000003, 4.899565197],
-                     'F460M': [2.575447122, 4.883350419],
-                     'F480M': [2.549773725, 4.899565197]}}
+    if wavelengthrange is None:
+        # This is a list of tuples that specify the
+        # order, filter, wave min, wave max
+        wavelengthrange = [(1, 'F250M', 2.500411072, 4.800260833),
+                           (1, 'F277W', 2.500411072, 3.807062006),
+                           (1, 'F300M', 2.684896869, 4.025318456),
+                           (1, 'F322W2', 2.5011293930000003, 4.215842089),
+                           (1, 'F335M', 3.01459734, 4.260432726),
+                           (1, 'F356W', 3.001085025, 4.302320901),
+                           (1, 'F360M', 3.178096344, 4.00099629),
+                           (1, 'F410M', 3.6267051809999997, 4.5644598),
+                           (1, 'F430M', 4.04828939, 4.511761774),
+                           (1, 'F444W', 3.696969216, 4.899565197),
+                           (1, 'F460M', 3.103778615, 4.881999188),
+                           (1, 'F480M', 4.5158154679999996, 4.899565197),
+                           (2, 'F250M', 2.500411072, 2.667345336),
+                           (2, 'F277W', 2.500411072, 3.2642254050000004),
+                           (2, 'F300M', 2.6659796289999997, 3.2997071729999994),
+                           (2, 'F322W2', 2.5011293930000003, 4.136119434),
+                           (2, 'F335M', 2.54572003, 3.6780519760000003),
+                           (2, 'F356W', 2.529505253, 4.133416971),
+                           (2, 'F360M', 2.557881113, 4.83740855),
+                           (2, 'F410M', 2.5186954019999996, 4.759037127),
+                           (2, 'F430M', 2.5362614100000003, 4.541488865),
+                           (2, 'F444W', 2.5011293930000003, 4.899565197),
+                           (2, 'F460M', 2.575447122, 4.883350419),
+                           (2, 'F480M', 2.549773725, 4.899565197),
+                           ]
+    # array of integers of unique orders
+    orders = sorted(set((x[0] for x in wavelengthrange)))
 
-    filter_range = OrderedDict(sorted(tdict.items(),
-                                      key=lambda f: f[0]))
-    # array of integers
-    orders = list(filter_range.keys())
+    filters = sorted(set((x[1] for x in wavelengthrange)))
 
+    # Nircam has not specified any limitation on the orders
+    # that should be extracted by default yet so all are
+    # included.
     if extract_orders is None:
-        # Nircam has not specified any limitation on the orders
-        # that should be extracted by default yet so all are
-        # included.
         extract_orders = []
-        for order in filter_range.keys():
-            for filter in filter_range[order].keys():
-                extract_orders.append(orders)
-
-    # filters for every order
-    waverange_selector = list(filter_range[orders[0]].keys())
-
-    # The lists below need
-    # to remain ordered to be correctly referenced
-    wavelengthrange = []
-    for order in orders:
-        o = []
-        for fname in waverange_selector:
-            o.append(filter_range[order][fname])
-        wavelengthrange.append(o)
+        for f in filters:
+            extract_orders.append([f, orders])
 
     ref = wcs_ref_models.WavelengthrangeModel()
     ref.meta.update(ref_kw)
-    ref.meta.exposure.p_exptype = "NRC_GRISM|NRC_TSGRISM"
+    ref.meta.exposure.p_exptype = "NRC_WFSS|NRC_TSGRISM"
     ref.meta.input_units = u.micron
     ref.meta.output_units = u.micron
-    ref.waverange_selector = waverange_selector
     ref.wavelengthrange = wavelengthrange
     ref.extract_orders = extract_orders
     ref.order = orders
+    ref.waverange_selector = filters
 
-    entry = HistoryEntry({'description': history,
-                          'time': datetime.datetime.utcnow()})
-    sdict = Software({'name': 'nircam_reftools.py',
-                      'author': author,
-                      'homepage': 'https://github.com/spacetelescope/jwreftools',
-                      'version': '0.7.1'})
-    entry['sofware'] = sdict
-    ref.history['entries'] = [entry]
+    history = HistoryEntry({'description': history,
+                            'time': datetime.datetime.utcnow()})
+    software = Software({'name': 'nircam_reftools.py',
+                         'author': author,
+                         'homepage': 'https://github.com/spacetelescope/jwreftools',
+                         'version': '0.7.1'})
+    history['software'] = software
+    ref.history = [history]
+    ref.to_asdf(outname)
+    ref.validate()
+
     ref.to_asdf(outname)
     ref.validate()
 
