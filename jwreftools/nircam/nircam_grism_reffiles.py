@@ -250,7 +250,7 @@ def create_grism_config(conffile="",
     ref.validate()
 
 
-def create_grism_wavelengthrange(outname="nircam_grism_wavelengthrange.asdf",
+def create_grism_wavelengthrange(outname="nircam_wavelengthrange.asdf",
                                  history="Ground NIRCAM Grism wavelengthrange",
                                  author="STScI",
                                  wavelengthrange=None,
@@ -277,6 +277,7 @@ def create_grism_wavelengthrange(outname="nircam_grism_wavelengthrange.asdf",
                                             description="NIRCAM Grism-Filter Wavelength Ranges",
                                             exp_type="NRC_WFSS",
                                             author=author,
+                                            pupil="ANY",
                                             model_type="WavelengthrangeModel",
                                             filename=outname,
                                             )
