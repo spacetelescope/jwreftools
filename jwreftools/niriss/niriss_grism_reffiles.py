@@ -53,18 +53,13 @@ dispersing elements.
 
 import re
 import datetime
-import numpy as np
-from collections import OrderedDict
 
 from asdf.tags.core import Software, HistoryEntry
 from astropy.modeling.models import Polynomial2D, Polynomial1D
-from astropy.io import fits
 from astropy import units as u
 
-
-
 from jwst.datamodels import NIRISSGrismModel
-from jwst.datamodels import wcs_ref_models, util
+from jwst.datamodels import wcs_ref_models
 
 
 def common_reference_file_keywords(reftype=None,
@@ -139,8 +134,8 @@ def create_grism_config(conffile="",
      -- the initial conf file that nor gave me didn't have this keyword so
      this code adds a placeholder.
 
-     this reference file also contains the polynomial model which is appropriate
-     for the coefficients which are listed.
+     this reference file also contains the polynomial model which is
+     appropriate for the coefficients which are listed.
 
     Parameters
     ----------
@@ -166,28 +161,27 @@ def create_grism_config(conffile="",
     if not history:
         history = "Created from {0:s}".format(conffile)
 
-    # if pupil is none get from filename like NIRCAM_modB_R.conf
     if not fname:
         fname = conffile.split(".")[0]
     if not pupil:
         pupil = conffile.split(".")[1]
 
     ref_kw = common_reference_file_keywords(reftype="specwcs",
-                description="{0:s} dispersion model parameters".format(pupil),
-                exp_type="NIS_WFSS",
-                model_type='NIRISSGrismModel',
-                pupil=pupil,
-                filtername=fname,
-                history=history,
-                author=author,
-                filename=outname,
-                )
+                                            description="{0:s} dispersion model parameters".format(pupil),
+                                            exp_type="NIS_WFSS",
+                                            model_type='NIRISSGrismModel',
+                                            pupil=pupil,
+                                            filtername=fname,
+                                            history=history,
+                                            author=author,
+                                            filename=outname,
+                                            )
 
     # get all the key-value pairs from the input file
     conf = dict_from_file(conffile)
     beamdict = split_order_info(conf)
-    letter = re.compile("^[a-zA-Z0-9]{0,1}$")  # match one only
-    etoken = re.compile("^BEAM_[A-Z,a-z]{1,1}")  # find beam key
+    # letter = re.compile("^[a-zA-Z0-9]{0,1}$")  # match one only
+    # etoken = re.compile("^BEAM_[A-Z,a-z]{1,1}")  # find beam key
 
     # add min and max mag info if not provided
     # also make beam coeff lists
@@ -278,7 +272,8 @@ def create_grism_config(conffile="",
     ref.invdispl = invdispl
     ref.fwcpos_ref = conf['FWCPOS_REF']
     ref.order = ordermap
-    entry = HistoryEntry({'description': history, 'time': datetime.datetime.utcnow()})
+    entry = HistoryEntry({'description': history,
+                          'time': datetime.datetime.utcnow()})
     sdict = Software({'name': 'niriss_reftools.py',
                       'author': author,
                       'homepage': 'https://github.com/spacetelescope/jwreftools',
@@ -289,17 +284,28 @@ def create_grism_config(conffile="",
     ref.validate()
 
 
-def create_grism_wavelengthrange(outname="",
-                           history="NIRCAM Grism wavelengthrange",
-                           author="STScI",
-                           module="N/A",
-                           pupil="N/A",
-                           filter_range=None,
-                           extract_orders=None):
-    """Create a wavelengthrange reference file. There is a different file for each filter
+def create_grism_wavelengthrange(outname="niriss_wavelengthrange.asdf",
+                                 history="NIRISS Grism-fiter wavelengthrange",
+                                 author="STScI",
+                                 module="N/A",
+                                 pupil="N/A",
+                                 wavelengthrange=None,
+                                 extract_orders=None):
+    """Create a wavelengthrange reference file for NIRISS.
 
-    Supply a filter range dictionary or use the default
-
+    Parameters
+    ----------
+    outname: str
+        The output name of the file
+    history: str
+        History information about it's creation
+    author: str
+        Person or entity making the file
+    wavelengthrange: list(tuples)
+        A list of tuples that set the order, filter, and wavelength
+        range min and max
+    extract_orders: list[list]
+        A list of lists that specify
     """
     ref_kw = common_reference_file_keywords(reftype="wavelengthrange",
                                             title="NIRISS WFSS wavelengthrange",
@@ -313,13 +319,13 @@ def create_grism_wavelengthrange(outname="",
                                             filename=outname,
                                             filtername=None)
 
-    if filter_range is None:
+    if wavelengthrange is None:
+        orders = [-1, 0, 1, 2, 3]  # orders available
         # These numbers from Grabriel Brammer, in microns
-        # There is only one set of ranges because they are
-        # valid for all orders listed, the wavelengthrange
-        # file requires a double array by order, so they
-        # will be replicated for each order, this allows
-        # allows adaptation for future updates per order
+        # The ranges are repeated because he said that
+        # to approximation they are the same for all orders
+        # This is a list of tuples that specify the order, filter,
+        # wave min, wave max
         tdict = {'F090W': [0.79, 1.03],
                  'F115W': [0.97, 1.32],
                  'F140M': [1.29, 1.52],
@@ -327,13 +333,15 @@ def create_grism_wavelengthrange(outname="",
                  'F158M': [1.41, 1.74],
                  'F200W': [1.70, 2.28]
                  }
-        filter_range = OrderedDict(sorted(tdict.items(),
-                                          key=lambda f: f[1]))
 
-        orders = [-1, 0, 1, 2, 3]  # orders available
+        wavelengthrange = []
+        for order in orders:
+            for k, v in tdict.items():
+                wavelengthrange.append((order, k, v[0], v[1]))
     else:
-        # array of integers
-        orders = list(np.arange(len(filter_range.keys())))
+        orders = sorted(set((x[0] for x in wavelengthrange)))
+
+    filters = sorted(set((x[1] for x in wavelengthrange)))
 
     if extract_orders is None:
         # These are the orders that will be extracted by
@@ -343,43 +351,33 @@ def create_grism_wavelengthrange(outname="",
         # should be extracted for each filter.
         # The values that are currently here are those
         # specified by Kevin Volk via communication.
-        extract_orders = [[1, 2],
-                          [1],
-                          [1],
-                          [1],
-                          [1],
-                          [1]]
-
-    # same filters for every order, array of strings
-    waverange_selector = list(filter_range.keys())
-
-    # The lists below need
-    # to remain ordered to be correctly referenced
-    wavelengthrange = []
-    for order in orders:
-        o = []
-        for fname in waverange_selector:
-            o.append(filter_range[fname])
-        wavelengthrange.append(o)
+        # Only F090W extracts more than order 1
+        extract_orders = []
+        for f in filters:
+            if f == 'F090W':
+                order = [1, 2]
+            else:
+                order = [1]
+            extract_orders.append([f, order])
 
     ref = wcs_ref_models.WavelengthrangeModel()
     ref.meta.update(ref_kw)
     ref.meta.input_units = u.micron
     ref.meta.output_units = u.micron
-    ref.waverange_selector = waverange_selector
+    ref.waverange_selector = filters
     ref.wavelengthrange = wavelengthrange
     ref.order = orders
     ref.extract_orders = extract_orders
 
     # create the history entries
-    entry = HistoryEntry({'description': history, 'time': datetime.datetime.utcnow()})
-
-    sdict = Software({'name': 'niriss_reftools.py',
-                      'author': author,
-                      'homepage': 'https://github.com/spacetelescope/jwreftools',
-                      'version': '0.7.1'})
-    entry['software'] = sdict
-    ref.history['entries'] = [entry]
+    history = HistoryEntry({'description': history,
+                            'time': datetime.datetime.utcnow()})
+    software = Software({'name': 'niriss_reftools.py',
+                         'author': author,
+                         'homepage': 'https://github.com/spacetelescope/jwreftools',
+                         'version': '0.7.1'})
+    history['software'] = software
+    ref.history = [history]
     ref.to_asdf(outname)
     ref.validate()
 
@@ -415,7 +413,6 @@ def split_order_info(keydict):
     rangekey = re.compile('^[a-zA-Z]*_[0-1]{1,1}$')
     rdict = dict()  # return dictionary
     beams = list()
-    savekey = dict()
 
     # prefetch number of Beams, beam is the second string
     for key in keydict:
