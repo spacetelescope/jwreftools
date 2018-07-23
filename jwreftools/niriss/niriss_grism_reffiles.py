@@ -104,7 +104,7 @@ def common_reference_file_keywords(reftype=None,
 
 def create_grism_config(conffile="",
                         fname="",
-                        pupil="",
+                        pupil=None,
                         author="STScI",
                         history="NIRISS Grism Parameters",
                         outname=""):
@@ -163,7 +163,7 @@ def create_grism_config(conffile="",
 
     if not fname:
         fname = conffile.split(".")[0]
-    if not pupil:
+    if pupil is None:
         pupil = conffile.split(".")[1]
 
     ref_kw = common_reference_file_keywords(reftype="specwcs",
@@ -301,6 +301,8 @@ def create_grism_wavelengthrange(outname="niriss_wavelengthrange.asdf",
         History information about it's creation
     author: str
         Person or entity making the file
+    module: str
+    pupil: str
     wavelengthrange: list(tuples)
         A list of tuples that set the order, filter, and wavelength
         range min and max
