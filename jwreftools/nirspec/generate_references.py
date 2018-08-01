@@ -3,7 +3,8 @@ from . import *
 
 model_dir = "/internal/1/astropy/jwreftools/cv3"
 
-def generate():
+
+def generate(model_dir):
     # Create FPA file
     fpa_refname = os.path.join(model_dir, "Description", "FPA.fpa")
     create_fpa_reference(fpa_refname, "nirspec_cv3_fpa.asdf")
