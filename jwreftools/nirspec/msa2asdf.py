@@ -78,7 +78,7 @@ def create_msa_reference(msa_file, output_name, author=None, description=None, u
     software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
                          'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
     entry['software'] = software
-    msa_model.history['entries'] = [entry]
+    msa_model.history.append(entry)
     msa_model.to_asdf(output_name)
     msa_model.validate()
 

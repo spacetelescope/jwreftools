@@ -111,7 +111,7 @@ def create_wavecorr_refs(wzpc_files, outname=None, author=None, description=None
     software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
                          'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
     entry['software'] = software
-    model.history['entries'] = [entry]
+    model.history.append(entry)
     if outname is None:
         outname = "nirspec_wavecorr.asdf"
     model.to_asdf(outname)

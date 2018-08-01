@@ -87,6 +87,6 @@ def create_wavelengthrange_reference(wave_range_file, output_name, author=None, 
     software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
                          'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
     entry['software'] = software
-    wr_model.history = [entry]
+    wr_model.history.append(entry)
     wr_model.to_asdf(output_name)
     wr_model.validate()

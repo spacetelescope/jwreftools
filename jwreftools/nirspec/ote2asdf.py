@@ -101,6 +101,6 @@ def create_ote_reference(ote_file, output_name, author=None, description=None,
     software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
                          'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
     entry['software'] = software
-    model.history['entries'] = [entry]
+    model.history.append(entry)
     model.to_asdf(output_name)
     model.validate()

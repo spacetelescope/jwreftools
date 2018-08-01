@@ -21,7 +21,7 @@ def camera2asdf(camera_refname, author, description, useafter):
     software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
                          'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
     entry['software'] = software
-    camera_model.history['entries'] = [entry]
+    camera_model.history.append(entry)
 
     return camera_model
 

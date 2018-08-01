@@ -138,7 +138,7 @@ def disperser2asdf(disfile, tiltyfile, tiltxfile, author, description, useafter)
     software = Software({'name': 'jwstreftools', 'author': 'N.Dencheva',
                          'homepage': 'https://github.com/spacetelescope/jwreftools', 'version': "0.7.1"})
     entry['software'] = software
-    disperser_model.history['entries'] = [entry]
+    disperser_model.history.append(entry)
     return disperser_model
 
 
