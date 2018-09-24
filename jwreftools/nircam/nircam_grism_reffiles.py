@@ -51,15 +51,15 @@ def common_reference_file_keywords(reftype=None,
     return ref_file_common_keywords
 
 
-def create_grism_config(conffile="",
-                        pupil=None,
-                        module=None,
-                        author="STScI",
-                        history="",
-                        outname=None):
+def create_grism_specwcs(conffile="",
+                         pupil=None,
+                         module=None,
+                         author="STScI",
+                         history="",
+                         outname=None):
     """
     Create an asdf reference file to hold Grism C (column) or Grism R (rows)
-    configuration, no sensativity information is included
+    configuration information, no sensativity information is included
 
     Note: The orders are named alphabetically, i.e. Order A, Order B
     There are also sensativity fits files which are tables of wavelength,
@@ -111,7 +111,7 @@ def create_grism_config(conffile="",
 
     """
     if outname is None:
-        outname = "nircam_wfss_wavelengthrange.asdf"
+        outname = "nircam_wfss_specwcs.asdf"
     if not history:
         history = "Created from {0:s}".format(conffile)
 
