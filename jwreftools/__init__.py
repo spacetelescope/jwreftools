@@ -16,3 +16,4 @@ if not _ASTROPY_SETUP_:
     from . import nirspec
     from . import nircam 
     from . import miri
+    from . import reformat_nrs_ff
