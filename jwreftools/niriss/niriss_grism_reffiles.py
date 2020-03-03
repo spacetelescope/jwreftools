@@ -279,7 +279,7 @@ def create_grism_config(conffile="",
                       'homepage': 'https://github.com/spacetelescope/jwreftools',
                       'version': '0.7.1'})
     entry['software'] = sdict
-    ref.history['entries'] = [entry]
+    ref.history.append(entry)
     ref.to_asdf(outname)
     ref.validate()
 
@@ -379,7 +379,7 @@ def create_grism_wavelengthrange(outname="niriss_wavelengthrange.asdf",
                          'homepage': 'https://github.com/spacetelescope/jwreftools',
                          'version': '0.7.1'})
     history['software'] = software
-    ref.history = [history]
+    ref.history.append(history)
     ref.to_asdf(outname)
     ref.validate()
 
