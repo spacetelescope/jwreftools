@@ -137,6 +137,7 @@ def create_grism_specwcs(conffile="",
     # get all the key-value pairs from the input file
     conf = dict_from_file(conffile)
     beamdict = split_order_info(conf)
+
     # beam = re.compile('^(?:[+\-]){0,1}[a-zA-Z0-9]{0,1}$')  # match beam only
     # read in the sensitivity tables to save their content
     # they currently have names like this: NIRCam.A.1st.sensitivity.fits
@@ -460,15 +461,13 @@ def split_order_info(keydict):
         if token.match(key):
             b = key.split("_")[1].upper()
             if b not in beams:
-                beams.append(b)
+               beams.append(b)
     for b in beams:
         rdict[b] = dict()
 
     #  assumes that keys are sep with underscore and beam is in second section
     for key in keydict:
-        if not token.match(key):
-            rdict[key] = keydict[key]  # not associated with a beam
-        else:
+        if token.match(key):
             b = key.split("_")[1].upper()
             newkey = key.replace("_{}".format(b), "")
             rdict[b][newkey] = keydict[key]
