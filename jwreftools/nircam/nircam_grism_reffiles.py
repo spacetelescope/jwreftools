@@ -52,6 +52,7 @@ def common_reference_file_keywords(reftype=None,
 
 
 def create_grism_specwcs(conffile="",
+                         filter=None,
                          pupil=None,
                          module=None,
                          author="STScI",
@@ -92,6 +93,9 @@ def create_grism_specwcs(conffile="",
     ----------
     conffile : str
         The text file with configuration information, formatted as aXe expects
+    filter : str
+        Name of the filter the conffile corresponds to
+        Taken from the conffile name if not specified
     pupil : str
         Name of the grism the conffile corresponds to
         Taken from the conffile name if not specified
@@ -115,13 +119,18 @@ def create_grism_specwcs(conffile="",
     if not history:
         history = "Created from {0:s}".format(conffile)
 
-    # if pupil is none get from filename like NIRCAM_modB_R.conf
+    # if filter is none get from filename like NIRCAM_F444W_modB_R.conf
+    if filter is None:
+        filter = conffile.split("_")[1]
+    # if pupil is none get from filename
     if pupil is None:
         pupil = "GRISM" + conffile.split(".")[0][-1]
     # if module is none get from filename
     if module is None:
         module = conffile.split(".")[0][-3]
+    print("Filter is {}".format(filter))
     print("Pupil is {}".format(pupil))
+    print("Module is {}".format(module))
 
     ref_kw = common_reference_file_keywords(reftype="specwcs",
                                             title="NIRCAM Grism Parameters",
@@ -130,6 +139,7 @@ def create_grism_specwcs(conffile="",
                                             author=author,
                                             model_type="NIRCAMGrismModel",
                                             module=module,
+                                            fname=filter,
                                             pupil=pupil,
                                             filename=outname,
                                             )
@@ -182,10 +192,9 @@ def create_grism_specwcs(conffile="",
     dispy = []
 
     for order in orders:
-        # convert the displ wavelengths to microns if the input
-        # file is still in angstroms
-        l0 = beamdict[order]['DISPL'][0] / 10000.
-        l1 = beamdict[order]['DISPL'][1] / 10000.
+        # We assume that wavelength units are already microns
+        l0 = beamdict[order]['DISPL'][0]
+        l1 = beamdict[order]['DISPL'][1]
 
         # create polynomials using the coefficients of each order
 
@@ -228,8 +237,11 @@ def create_grism_specwcs(conffile="",
 
     ref = NIRCAMGrismModel()
     ref.meta.update(ref_kw)
-    # This reference file is good for NRC_WFSS and TSGRISM modes
-    ref.meta.exposure.p_exptype = "NRC_WFSS|NRC_TSGRISM"
+    # Check for ref files that apply to NRC_TSGRISM in addition to
+    # the more generic NRC_WFSS mode
+    if module == 'A' and pupil == 'GRISMR' and (
+        filter in ['F277W', 'F322W2', 'F356W', 'F444W']):
+        ref.meta.exposure.p_exptype = "NRC_WFSS|NRC_TSGRISM"
     ref.meta.input_units = u.micron
     ref.meta.output_units = u.micron
     ref.displ = displ
@@ -238,13 +250,13 @@ def create_grism_specwcs(conffile="",
     ref.invdispx = invdispx
     ref.invdispy = invdispy
     ref.invdispl = invdispl
-    ref.order = oo
+    ref.orders = oo
     history = HistoryEntry({'description': history,
                             'time': datetime.datetime.utcnow()})
-    software = Software({'name': 'nircam_reftools.py',
+    software = Software({'name': 'nircam_grism_reffiles.py',
                          'author': author,
                          'homepage': 'https://github.com/spacetelescope/jwreftools',
-                         'version': '0.7.1'})
+                         'version': '0.8.0'})
     history['software'] = software
     ref.history = [history]
     ref.to_asdf(outname)
@@ -519,7 +531,7 @@ def dict_from_file(filename):
 
     Examples
     --------
-    dict_from_file('NIRCAM_C.conf')
+    dict_from_file('NIRCAM_F444W_modA_C.conf')
 
     Returns
     -------
