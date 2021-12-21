@@ -258,12 +258,12 @@ def create_grism_config(conffile="",
 
     # change the orders into translatable integer strings
     # the conf file niriss is giving me are using letter designations
-    beam_lookup = {"A": "+1", "B": "0", "C": "+2", "D": "+3", "E": "-1"}
-    ordermap = [int(beam_lookup[order]) for order in orders]
+    # beam_lookup = {"A": "+1", "B": "0", "C": "+2", "D": "+3", "E": "-1"}
+    # ordermap = [int(beam_lookup[order]) for order in orders]
 
     # save the reference file
     ref = NIRISSGrismModel()
-    ref.meta.update(ref_kw)
+    ref.meta.instance.update(ref_kw)
     ref.meta.input_units = u.micron
     ref.meta.output_units = u.micron
     ref.dispx = dispx
@@ -271,7 +271,7 @@ def create_grism_config(conffile="",
     ref.displ = displ
     ref.invdispl = invdispl
     ref.fwcpos_ref = conf['FWCPOS_REF']
-    ref.order = ordermap
+    ref.order = [int(order) for order in orders]
     entry = HistoryEntry({'description': history,
                           'time': datetime.datetime.utcnow()})
     sdict = Software({'name': 'niriss_reftools.py',
@@ -423,7 +423,7 @@ def split_order_info(keydict):
             if b not in beams:
                 beams.append(b)
                 rdict[b] = dict()
-            newkey = key.replace("_{}".format(b), "")
+            newkey = key.replace("_{}".format(b), "", 1)
             rdict[b][newkey] = keydict[key]
 
     # look for range variables to make them into tuples
