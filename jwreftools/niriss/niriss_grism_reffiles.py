@@ -53,7 +53,7 @@ dispersing elements.
 
 import re
 import datetime
-
+import numpy as np
 from asdf.tags.core import Software, HistoryEntry
 from astropy.modeling.models import Polynomial2D, Polynomial1D
 from astropy import units as u
@@ -109,8 +109,8 @@ def create_grism_config(conffile="",
                         history="NIRISS Grism Parameters",
                         outname=""):
     """
-    pupil is the blocking filter
-    filter is the grism
+    Pupil is the blocking filter.
+    Filter is the grism.
 
     Create an asdf reference file to hold Grism C (column) or Grism R (rows)
     configuration, no sensativity information is included
@@ -179,7 +179,8 @@ def create_grism_config(conffile="",
 
     # get all the key-value pairs from the input file
     conf = dict_from_file(conffile)
-    beamdict = split_order_info(conf)
+    from ..nircam.nircam_grism_reffiles import split_order_info as nrc_split_order_info
+    beamdict = nrc_split_order_info(conf)
     # letter = re.compile("^[a-zA-Z0-9]{0,1}$")  # match one only
     # etoken = re.compile("^BEAM_[A-Z,a-z]{1,1}")  # find beam key
 
@@ -240,14 +241,14 @@ def create_grism_config(conffile="",
         # the dispxy functions here are pulled into a 1D
         # such that the final poly is ans = x_model + t*y_model
 
-        e0, e1 = beamdict[order]['DISPX']
+        e0, e1, e2 = beamdict[order]['DISPX']
         model_x = Polynomial2D(2, c0_0=e0[0], c1_0=e0[1], c2_0=e0[4],
                                c0_1=e0[2], c1_1=e0[5], c0_2=e0[3])
         model_y = Polynomial2D(2, c0_0=e1[0], c1_0=e1[1], c2_0=e1[4],
                                c0_1=e1[2], c1_1=e1[5], c0_2=e1[3])
         dispx.append((model_x, model_y))
 
-        e0, e1 = beamdict[order]['DISPY']
+        e0, e1, e2 = beamdict[order]['DISPY']
         model_x = Polynomial2D(2, c0_0=e0[0], c1_0=e0[1], c2_0=e0[4],
                                c0_1=e0[2], c1_1=e0[5], c0_2=e0[3])
         model_y = Polynomial2D(2, c0_0=e1[0], c1_0=e1[1], c2_0=e1[4],
@@ -270,7 +271,7 @@ def create_grism_config(conffile="",
     ref.dispy = dispy
     ref.displ = displ
     ref.invdispl = invdispl
-    ref.fwcpos_ref = conf['FWCPOS_REF']
+    #ref.fwcpos_ref = conf['FWCPOS_REF']
     ref.order = [int(order) for order in orders]
     entry = HistoryEntry({'description': history,
                           'time': datetime.datetime.utcnow()})
@@ -363,7 +364,7 @@ def create_grism_wavelengthrange(outname="niriss_wavelengthrange.asdf",
             extract_orders.append([f, order])
 
     ref = wcs_ref_models.WavelengthrangeModel()
-    ref.meta.update(ref_kw)
+    ref.meta.instance.update(ref_kw)
     ref.meta.input_units = u.micron
     ref.meta.output_units = u.micron
     ref.waverange_selector = filters
@@ -460,67 +461,96 @@ def split_order_info(keydict):
     return rdict
 
 
-def dict_from_file(filename):
-    """Read in a file and return a dict of the key value pairs.
-
-    This is a generic read for a text file with the line following format:
-
-    keyword<token>value
-
-    Where keyword should start with a character, not a number
-    Non-alphabetic starting characters are ignored
-    <token> can be space or comma
-
-    Parameters
-    ----------
-    filename : str
-        Name of the file to interpret
-
-    Examples
-    --------
-    dict_from_file('NIRISS_C.conf')
-
-    Returns
-    -------
-    dictionary of deciphered keys and values
-
-    """
-    token = '\s+|(?<!\d)[,](?!\d)'
-    letters = re.compile("(^[a-zA-Z])")  # starts with a letter
-    numbers = re.compile("(^(?:[+\-])?(?:\d*)(?:\.)?(?:\d*)?(?:[eE][+\-]?\d*$)?)")
-    empty = re.compile("(^\s*$)")  # is a blank line
-
-    print("\nReading {0:s}  ...".format(filename))
-    with open(filename, 'r') as fh:
-        lines = fh.readlines()
-    content = dict()
+def dict_from_file(conffile):
+    f = open(conffile)
+    lines = f.readlines()
+    f.close()
+    beamdict = {}
+    beam = ""
     for line in lines:
-        value = None
-        vallist = []
-        key = None
-        if not empty.match(line):
-            if letters.match(line):
-                pair = re.split(token, line.strip(), maxsplit=10)
-                if len(pair) == 2:
-                    key = pair[0]
-                    if numbers.fullmatch(pair[1]):
-                        value = eval(pair[1])
-                else:  # more than 2 values
-                    key = pair[0]
-                    vals = pair[1:]
-                    for v in vals:
-                        if numbers.fullmatch(v):
-                            vallist.append(eval(v))
-                        else:
-                            raise ValueError("Unexpected value for {0}"
-                                             .format(key))
+        if line.startswith('BEAM'):
+            if beam and dispx and displ:
+                beamdict[beam] = {'dispx': np.array([l.split()[1:] for l in dispx], dtype=np.float),
+                                  'dispy': np.array([l.split()[1:] for l in dispy], dtype=np.float),
+                                  'displ': np.array([l.split()[1:] for l in displ], dtype=np.float)
+                                  }
+            beam = line.split('_')[1].strip()
+            dispx = []
+            dispy= []
+            displ=[]
+        elif line.startswith('DISPL'):
+            displ.append(line)
+        elif line.startswith('DISPX'):
+            dispx.append(line)
+        elif line.startswith('DISPY'):
+            dispy.append(line)
+        else:
+            continue
 
-        if key:
-            if (("FILTER" not in key) and ("SENS" not in key)):
-                if (value is None):
-                    content[key] = vallist
-                    print("Setting {0:s} = {1}".format(key, vallist))
-                else:
-                    content[key] = value
-                    print("Setting {0:s} = {1}".format(key, value))
-    return content
+    return beamdict
+
+
+# def dict_from_file(filename):
+#     """Read in a file and return a dict of the key value pairs.
+#
+#     This is a generic read for a text file with the line following format:
+#
+#     keyword<token>value
+#
+#     Where keyword should start with a character, not a number
+#     Non-alphabetic starting characters are ignored
+#     <token> can be space or comma
+#
+#     Parameters
+#     ----------
+#     filename : str
+#         Name of the file to interpret
+#
+#     Examples
+#     --------
+#     dict_from_file('NIRISS_C.conf')
+#
+#     Returns
+#     -------
+#     dictionary of deciphered keys and values
+#
+#     """
+#     token = '\s+|(?<!\d)[,](?!\d)'
+#     letters = re.compile("(^[a-zA-Z])")  # starts with a letter
+#     numbers = re.compile("(^(?:[+\-])?(?:\d*)(?:\.)?(?:\d*)?(?:[eE][+\-]?\d*$)?)")
+#     empty = re.compile("(^\s*$)")  # is a blank line
+#
+#     print("\nReading {0:s}  ...".format(filename))
+#     with open(filename, 'r') as fh:
+#         lines = fh.readlines()
+#     content = dict()
+#     for line in lines:
+#         value = None
+#         vallist = []
+#         key = None
+#         if not empty.match(line):
+#             if letters.match(line):
+#                 pair = re.split(token, line.strip(), maxsplit=10)
+#                 if len(pair) == 2:
+#                     key = pair[0]
+#                     if numbers.fullmatch(pair[1]):
+#                         value = eval(pair[1])
+#                 else:  # more than 2 values
+#                     key = pair[0]
+#                     vals = pair[1:]
+#                     for v in vals:
+#                         if numbers.fullmatch(v):
+#                             vallist.append(eval(v))
+#                         else:
+#                             raise ValueError("Unexpected value for {0}"
+#                                              .format(key))
+#
+#         if key:
+#             if (("FILTER" not in key) and ("SENS" not in key)):
+#                 if (value is None):
+#                     content[key] = vallist
+#                     print("Setting {0:s} = {1}".format(key, vallist))
+#                 else:
+#                     content[key] = value
+#                     print("Setting {0:s} = {1}".format(key, value))
+#     return content
