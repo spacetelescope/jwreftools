@@ -200,11 +200,12 @@ def create_grism_config(conffile,
     dispx = []
     dispy = []
     invdispl = []
+    int_orders = [int(order) for order in orders]
 
     for order in orders:
         # convert the displ wavelengths to microns
-        l0 = beamdict[order]['DISPL'][0] / 10000.
-        l1 = beamdict[order]['DISPL'][1] / 10000.
+        l0 = beamdict[order]['DISPL'][0] #/ 10000.
+        l1 = beamdict[order]['DISPL'][1] #/ 10000.
         # create polynomials for the coefficients of each order
         invdispl.append(Polynomial1D(1, c0=-l0/l1, c1=1./l1))
         displ.append(Polynomial1D(1, c0=l0, c1=l1))
@@ -214,21 +215,23 @@ def create_grism_config(conffile,
 
         e0, e1, e2 = beamdict[order]['DISPX']
         # free coefficient
-        cpoly_0 = Polynomial2D(2, c0_0=e0[0], c1_0=e0[1], c2_0=e0[4],
-                               c0_1=e0[2], c1_1=e0[5], c0_2=e0[3])
-        cpoly_1 = Polynomial2D(2, c0_0=e1[0], c1_0=e1[1], c2_0=e1[4],
-                               c0_1=e1[2], c1_1=e1[5], c0_2=e1[3])
-        cpoly_2 = Polynomial2D(2, c0_0=e2[0], c1_0=e2[1], c2_0=e2[4],
-                               c0_1=e2[2], c1_1=e2[5], c0_2=e2[3])
+        # cpoly_0 = Polynomial2D(2, c0_0=e0[0], c1_0=e0[1], c2_0=e0[4],
+        #                        c0_1=e0[2], c1_1=e0[5], c0_2=e0[3])
+        cpoly_0 = Polynomial2D(2, c0_0=e0[0], c1_0=e0[1], c2_0=e0[3],
+                               c0_1=e0[2], c1_1=e0[4], c0_2=e0[5])
+        cpoly_1 = Polynomial2D(2, c0_0=e1[0], c1_0=e1[1], c2_0=e1[3],
+                               c0_1=e1[2], c1_1=e1[4], c0_2=e1[5])
+        cpoly_2 = Polynomial2D(2, c0_0=e2[0], c1_0=e2[1], c2_0=e2[3],
+                               c0_1=e2[2], c1_1=e2[4], c0_2=e2[5])
         dispx.append((cpoly_0, cpoly_1, cpoly_2))
 
         e0, e1, e2 = beamdict[order]['DISPY']
-        cpoly_0 = Polynomial2D(2, c0_0=e0[0], c1_0=e0[1], c2_0=e0[4],
-                               c0_1=e0[2], c1_1=e0[5], c0_2=e0[3])
-        cpoly_1 = Polynomial2D(2, c0_0=e1[0], c1_0=e1[1], c2_0=e1[4],
-                               c0_1=e1[2], c1_1=e1[5], c0_2=e1[3])
-        cpoly_2 = Polynomial2D(2, c0_0=e2[0], c1_0=e2[1], c2_0=e2[4],
-                               c0_1=e2[2], c1_1=e2[5], c0_2=e2[3])
+        cpoly_0 = Polynomial2D(2, c0_0=e0[0], c1_0=e0[1], c2_0=e0[3],
+                               c0_1=e0[2], c1_1=e0[4], c0_2=e0[5])
+        cpoly_1 = Polynomial2D(2, c0_0=e1[0], c1_0=e1[1], c2_0=e1[3],
+                               c0_1=e1[2], c1_1=e1[4], c0_2=e1[5])
+        cpoly_2 = Polynomial2D(2, c0_0=e2[0], c1_0=e2[1], c2_0=e2[3],
+                               c0_1=e2[2], c1_1=e2[4], c0_2=e2[5])
         dispy.append((cpoly_0, cpoly_1, cpoly_2))
         # disp is cpoly_0 + t * cpoly_1 + t**2 * cpoly_2
         # invdisp is (t - model_x) / model_y - old linear one
@@ -249,7 +252,8 @@ def create_grism_config(conffile,
     ref.invdispl = invdispl
     # Commented out because it's not in the V3 of the CONF files.
     # ref.fwcpos_ref = conf['FWCPOS_REF']
-    ref.order = [int(order) for order in orders]
+    ref.fwcpos_ref = fwcpos_ref
+    ref.orders = [int(order) for order in orders]
     entry = HistoryEntry({'description': history,
                           'time': datetime.datetime.utcnow()})
     sdict = Software({'name': 'niriss_reftools.py',
