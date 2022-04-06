@@ -369,9 +369,9 @@ def create_grism_wavelengthrange(outname="niriss_wavelengthrange.asdf",
 def dict_from_file(conffile):
     def update_beamdict(beamdict, beam, dispx, dispy, displ):
         print(f"updating beam {beam}")
-        beamdict[beam] = {'DISPX': np.array([line.split()[1:] for line in dispx], dtype=np.float),
-                          'DISPY': np.array([line.split()[1:] for line in dispy], dtype=np.float),
-                          'DISPL': np.array([line.split()[1:] for line in displ], dtype=np.float)
+        beamdict[beam] = {'DISPX': np.array([line.split()[1:] for line in dispx], dtype=float),
+                          'DISPY': np.array([line.split()[1:] for line in dispy], dtype=float),
+                          'DISPL': np.array([line.split()[1:] for line in displ], dtype=float)
                           }
     f = open(conffile)
     lines = f.readlines()
