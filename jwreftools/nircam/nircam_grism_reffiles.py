@@ -2,10 +2,12 @@
 import re
 import datetime
 
+import numpy as np
+
 from asdf.tags.core import Software, HistoryEntry
 
 from astropy import units as u
-from astropy.modeling.models import Polynomial1D
+from astropy.modeling.models import Polynomial1D, Polynomial2D, Const2D
 
 from jwst.datamodels import NIRCAMGrismModel
 from jwst.datamodels import wcs_ref_models
@@ -51,204 +53,225 @@ def common_reference_file_keywords(reftype=None,
     return ref_file_common_keywords
 
 
-def create_grism_specwcs(conffile="",
-                         pupil=None,
-                         module=None,
-                         author="STScI",
-                         history="",
-                         outname=None):
+def dict_from_file(conffile):
+    """Read in the CONF file into a dictionary."""
+
+    def update_beamdict(beamdict, beam, dispx, dispy, displ):
+        print(f"updating beam {beam}")
+        beamdict[beam] = {'DISPX': np.array([line.split()[1:] for line in dispx], dtype=float),
+                          'DISPY': np.array([line.split()[1:] for line in dispy], dtype=float),
+                          'DISPL': np.array([line.split()[1:] for line in displ], dtype=float)
+                          }
+    f = open(conffile)
+    lines = f.readlines()
+    f.close()
+    beamdict = {}
+    beam = ""
+    for line in lines:
+        if line.startswith('BEAM'):
+
+            if beam.strip():
+                update_beamdict(beamdict, beam, dispx, dispy, displ)
+            dispx = []
+            dispy = []
+            displ = []
+            beam = line.split('_')[1].strip()
+
+        elif line.startswith('DISPL'):
+            displ.append(line)
+        elif line.startswith('DISPX'):
+            dispx.append(line)
+        elif line.startswith('DISPY'):
+            dispy.append(line)
+        else:
+            continue
+
+    # Capture the last order reading from the CONF file
+    update_beamdict(beamdict, beam, dispx, dispy, displ)
+    return beamdict
+
+
+def get_degree_coeffs(e_grismconf):
+    """ Return the Polynomial degree and a dict of coefficients.
+
+    Parameters
+    ----------
+    e-grismconf : list
+        A list of numbers - one line with coefficients from the CONF file.
     """
-    Create an asdf reference file to hold Grism C (column) or Grism R (rows)
-    configuration information, no sensativity information is included
 
-    Note: The orders are named alphabetically, i.e. Order A, Order B
-    There are also sensativity fits files which are tables of wavelength,
-    sensativity, and error. These are specified in the conffile but will
-    not be read in and saved in the output reference file for now.
-    It's possible they may be included in the future, either here or as
-    a separate reference files. Their use here would be to help define the
-    min and max wavelengths which set the extent of the dispersed trace on
-    the grism image. Convolving the sensitiviy file with the filter throughput
-    allows one to calculate the wavelength of minimum throughput which defines
-    the edges of the trace.
-
-    direct_filter is not specified because it assumes that the wedge
-    information (wx,wy) is included in the conf file in one of the key-value
-    pairs, where the key includes the beam designation
-
-     this reference file also contains the polynomial model which is
-     appropriate for the coefficients which are listed.
-     wavelength = DISPL(order,x0,y0,t)
-     dx = DISPX(order,x0,y0,t)
-     dy = DISPY(order,x0,y0,t)
-
-     t = INVDISPX(order,x0,y0,dx)
-     t = INVDISPY(order,x0,y0,dy)
-     t = INVDISL(order,x0,y0, wavelength)
+    # keys are the size of the list of coefficients, values - the polynomial degree.
+    size_degree_map = {1: 0,
+                       6: 2,
+                       10: 3
+                       }
+    degree = size_degree_map[e_grismconf.size]
+    e0 = e_grismconf
+    if e_grismconf.size == 1:
+        coeffs = {'c0_0': e_grismconf[0]}
+    elif e_grismconf.size == 10:
+        coeffs = {'c0_0': e_grismconf[0], 'c1_0': e_grismconf[1], 'c2_0': e_grismconf[3], 'c3_0': e_grismconf[6],
+                  'c0_1': e_grismconf[2], 'c1_1': e_grismconf[4], 'c0_2': e_grismconf[5], 'c0_3': e_grismconf[9],
+                  'c2_1': e_grismconf[7], 'c1_2': e_grismconf[8]}
+    return size_degree_map[e_grismconf.size], coeffs
 
 
+def get_polynomial(e_grismconf):
+    """Return an astropy.modeling Polynomial from coefficients in the CONF file.
+
+    Parameters
+    ----------
+    e-grismconf : list
+        A list of numbers - one line with coefficients from the CONF file.
+
+    Returns
+    -------
+    poly : `~astropy.modeling.polynomial.Polynomial`
+        A Polynomial object.
+    """
+    degree, coeffs = get_degree_coeffs(e_grismconf)
+    return Polynomial2D(degree, **coeffs)
+
+
+def create_grism_config(conffile,
+                        filter_name,
+                        pupil,
+                        author="STScI",
+                        history="",
+                        outname="test.asdf"):
+    """
 
     Parameters
     ----------
     conffile : str
-        The text file with configuration information, formatted as aXe expects
+        The NIRCam CONF file, aXe format
+    filter_name : str
+        The name of the filter
     pupil : str
-        Name of the grism the conffile corresponds to
-        Taken from the conffile name if not specified
-    module : str
-        Name of the Nircam module
-        Taken from the conffile name if not specified
+        The grism name, one of [GRISMC, GRISMR]
     author : str
-        The name of the author
+        The name of the author.
     history : str
-        A comment about the refrence file to be saved with the meta information
+        A comment about the refrence file to be saved with
+        the meta information.
     outname : str
-        Output name for the reference file
+        The name of the output ASDF file.
+
+    Create a reference file of reftype "specwcs" to store the transforms
+    from direct image to grism image. The file is in ASDF format.
+    No sensitivity information is included.
+    The original CONF files are in https://github.com/npirzkal/GRISM_NIRCAM.
+    There are also sensitivity files in FITS format. These are converted to
+    "photom" reference files by the NIRCam team.
+
 
     Returns
     -------
-    fasdf : asdf.AsdfFile(jwst.datamodels.NIRCAMGrismModel)
+    fasdf : asdf.AsdfFile(jwst.datamodels.NIRCamGrismModel)
 
+    Examples
+    --------
+    >>> create_grism_config('NIRCAM_F360M_modA_C.conf', 'F360M', 'GRISMC', author="STScI",
+                             outname="test_nircam_specwcs.asdf")
     """
-    if outname is None:
-        outname = "nircam_wfss_specwcs.asdf"
+
     if not history:
         history = "Created from {0:s}".format(conffile)
 
-    # if pupil is none get from filename like NIRCAM_modB_R.conf
-    if pupil is None:
-        pupil = "GRISM" + conffile.split(".")[0][-1]
-    # if module is none get from filename
-    if module is None:
-        module = conffile.split(".")[0][-3]
-    print("Pupil is {}".format(pupil))
-
     ref_kw = common_reference_file_keywords(reftype="specwcs",
-                                            title="NIRCAM Grism Parameters",
-                                            description="{0:s} dispersion models".format(pupil),
+                                            description="{0:s} dispersion model parameters".format(pupil),
                                             exp_type="NRC_WFSS",
-                                            author=author,
-                                            model_type="NIRCAMGrismModel",
-                                            module=module,
+                                            model_type='NIRCAMGrismModel',
                                             pupil=pupil,
+                                            filtername=filter_name,
+                                            history=history,
+                                            author=author,
                                             filename=outname,
                                             )
 
     # get all the key-value pairs from the input file
-    conf = dict_from_file(conffile)
-    beamdict = split_order_info(conf)
+    beamdict = dict_from_file(conffile)
 
-    # beam = re.compile('^(?:[+\-]){0,1}[a-zA-Z0-9]{0,1}$')  # match beam only
-    # read in the sensitivity tables to save their content
-    # they currently have names like this: NIRCam.A.1st.sensitivity.fits
-    # translated as inst.beam/order.param
-    temp = dict()
-    etoken = re.compile("^[a-zA-Z]*_(?:[+\-]){1,1}[1,2]{1,1}")  # find beam key
-    for b, bdict in beamdict.items():
-            temp[b] = dict()
-
-    # add the new beam information to beamdict and remove spurious beam info
-    for k in temp:
-        for kk in temp[k]:
-            if etoken.match(kk):
-                kk = kk.replace("_{}".format(k), "")
-            beamdict[k][kk] = temp[k][kk]
-
-    # for NIRCAM, the R and C grism coefficients contain zeros where
-    # the dispersion is in the opposite direction. Meaning, the GRISMR,
-    # which disperses along ROWS has coefficients of zero in the y models
-    # and vice versa.
-    #
-    # There are separate reference files for each grism. Depending on the grism
-    # dispersion direction you either want to use the dx from source center or
-    # the dy from source center in the inverse dispersion relationship which is
-    # used to calculate the t value needed to calculate the wavelength at that
-    # pixel.
-    # The model creation here takes all of this into account by looking at the
-    # GRISM[R/C] the file is used for and creating a reference model with the
-    # appropriate dispersion direction in use. This eliminates having to decide
-    # which direction to calculatethe dispersion from given the input x,y
-    # pixel in the dispersed image.
-    orders = beamdict.keys()
-
-    # dispersion models valid per order and direction saved to reference file
-    # Forward
-    invdispl = []
-    invdispx = []
-    invdispy = []
-    # Backward
+    # The lists below need
+    # to remain ordered and referenced by filter or order
+    orders = sorted(beamdict.keys())
     displ = []
     dispx = []
     dispy = []
+    invdispl = []
+    int_orders = [int(order) for order in orders]
 
+    """
+    V4 of the NIRCam reference files have updated transforms for beam "+1"
+    from commisioning data. Beam "+2" has not been calibrated in flight yet
+    and stores transforms from gound testing. The transforms for beam "+1"
+    (order 1) have field dependence of the traces as well as the wavelength
+    solutions.
+    """
     for order in orders:
-        # convert the displ wavelengths to microns if the input
-        # file is still in angstroms
-        l0 = beamdict[order]['DISPL'][0] / 10000.
-        l1 = beamdict[order]['DISPL'][1] / 10000.
+        e = beamdict[order]['DISPL']
+        if len(e) == 3:
+            e0, e1, e2 = e
+            cpoly_0 = get_polynomial(e0)
+            cpoly_1 = get_polynomial(e1)
+            cpoly_2 = get_polynomial(e2)
+            displ.append((cpoly_0, cpoly_1, cpoly_2))
+        elif len(e) == 2:
+            e0, e1 = e
+            cpoly_0 = Polynomial1D(1, c0=e0[0], c1=e1[0])
+            displ.append((cpoly_0,))
 
-        # create polynomials using the coefficients of each order
+        e = beamdict[order]['DISPX']
 
-        # This holds the wavelength lookup coeffs
-        # This model is  INVDISPL for backward and returns t
-        # This model should be DISPL for forward and returns wavelength
-        if l1 == 0:
-            lmodel = Polynomial1D(1, c0=0, c1=0)
-        else:
-            lmodel = Polynomial1D(1, c0=-l0/l1, c1=1./l1)
-        invdispl.append(lmodel)
-        lmodel = Polynomial1D(1, c0=l0, c1=l1)
-        displ.append(lmodel)
+        if len(e) == 3:
+            # final poly is ans = cpoly_0 + t*cpoly_1 + t**2 * cpoly_2
+            e0, e1, e2 = e
+            cpoly_0 = get_polynomial(e0)
+            cpoly_1 = get_polynomial(e1)
+            cpoly_2 = get_polynomial(e2)
 
-        # This holds the x coefficients, for the R grism this model is the
-        # the INVDISPX returning t, for the C grism this model is the DISPX
-        x0, x1 = beamdict[order]['DISPX']
-        xmodel = Polynomial1D(1, c0=x0, c1=x1)
-        dispx.append(xmodel)
-        if x1 == 0:
-            xmodel = Polynomial1D(1, c0=0, c1=0)
-        else:
-            xmodel = Polynomial1D(1, c0=-x0/x1, c1=1./x1)
-        invdispx.append(xmodel)
+            dispx.append((cpoly_0, cpoly_1, cpoly_2))
+        elif len(e) == 2:
+            e0, e1 = e
+            cpoly_0 = Polynomial1D(1, c0=e0[0], c1=e1[0])
+            dispx.append((cpoly_0,))
 
-        # This holds the y coefficients, for the C grism, this model is
-        # the INVDISPY, returning t, for the R grism, this model is the DISPY
-        y0, y1 = beamdict[order]['DISPY']
-        ymodel = Polynomial1D(1, c0=y0, c1=y1)
-        dispy.append(ymodel)
-        if y1 == 0:
-            ymodel = Polynomial1D(1, c0=0, c1=0)
-        else:
-            ymodel = Polynomial1D(1, c0=-y0/y1, c1=1./y1)
-        invdispy.append(ymodel)
-
-    # change the orders into translatable integers
-    # so that we can look up the order with the proper index
-    oo = [int(o) for o in beamdict]
+        e = beamdict[order]['DISPY']
+        if len(e) == 3:
+            e0, e1, e2 = e
+            cpoly_0 = get_polynomial(e0)
+            cpoly_1 = get_polynomial(e1)
+            cpoly_2 = get_polynomial(e2)
+            dispy.append((cpoly_0, cpoly_1, cpoly_2))
+        elif len(e) == 2:
+            e0, e1 = e
+            cpoly_0 = Polynomial1D(1, c0=e0[0], c1=e1[0])
+            dispy.append((cpoly_0,))
 
     ref = NIRCAMGrismModel()
-    ref.meta.update(ref_kw)
-    # This reference file is good for NRC_WFSS and TSGRISM modes
+    ref.meta.instance.update(ref_kw)
     ref.meta.exposure.p_exptype = "NRC_WFSS|NRC_TSGRISM"
     ref.meta.input_units = u.micron
     ref.meta.output_units = u.micron
-    ref.displ = displ
+    ref.meta.input_units = u.micron
+    ref.meta.output_units = u.micron
     ref.dispx = dispx
     ref.dispy = dispy
-    ref.invdispx = invdispx
-    ref.invdispy = invdispy
+    ref.displ = displ
     ref.invdispl = invdispl
-    ref.order = oo
-    history = HistoryEntry({'description': history,
-                            'time': datetime.datetime.utcnow()})
-    software = Software({'name': 'nircam_reftools.py',
-                         'author': author,
-                         'homepage': 'https://github.com/spacetelescope/jwreftools',
-                         'version': '0.7.1'})
-    history['software'] = software
-    ref.history = [history]
+
+    ref.orders = [int(order) for order in orders]
+    entry = HistoryEntry({'description': history,
+                          'time': datetime.datetime.utcnow()})
+    sdict = Software({'name': 'nircam_grism_reffiles.py',
+                      'author': "STScI",
+                      'homepage': 'https://github.com/spacetelescope/jwreftools',
+                      'version': '0.7.1'})
+    entry['software'] = sdict
+    ref.history.append(entry)
     ref.to_asdf(outname)
     ref.validate()
+    return ref
 
 
 def create_tsgrism_wavelengthrange(outname="nircam_tsgrism_wavelengthrange.asdf",
@@ -500,7 +523,7 @@ def split_order_info(keydict):
 
     return rdict
 
-
+'''
 def dict_from_file(filename):
     """Read in a file and return a named tuple of the key value pairs.
 
@@ -564,3 +587,4 @@ def dict_from_file(filename):
                 print("Setting {0:s} = {1}".format(key, value))
 
     return content
+'''
