@@ -109,6 +109,10 @@ def get_degree_coeffs(e_grismconf):
     e0 = e_grismconf
     if e_grismconf.size == 1:
         coeffs = {'c0_0': e_grismconf[0]}
+    elif e_grismconf.size == 6:
+        coeffs = {'c0_0': e_grismconf[0], 'c1_0': e_grismconf[1],
+                  'c0_1': e_grismconf[2], 'c2_0': e_grismconf[3],
+                  'c1_1': e_grismconf[4], 'c0_2': e_grismconf[5]}
     elif e_grismconf.size == 10:
         coeffs = {'c0_0': e_grismconf[0], 'c1_0': e_grismconf[1], 'c2_0': e_grismconf[3], 'c3_0': e_grismconf[6],
                   'c0_1': e_grismconf[2], 'c1_1': e_grismconf[4], 'c0_2': e_grismconf[5], 'c0_3': e_grismconf[9],
@@ -138,7 +142,7 @@ def create_grism_config(conffile,
                         pupil,
                         author="STScI",
                         history="",
-                        outname="test.asdf"):
+                        outname=""):
     """
 
     Parameters
@@ -178,6 +182,9 @@ def create_grism_config(conffile,
     if not history:
         history = "Created from {0:s}".format(conffile)
 
+    if not outname:
+        outname = f"jwst_nircam_{filter_name}_{pupil}_specwcs.asdf"
+
     ref_kw = common_reference_file_keywords(reftype="specwcs",
                                             description="{0:s} dispersion model parameters".format(pupil),
                                             exp_type="NRC_WFSS",
@@ -209,7 +216,9 @@ def create_grism_config(conffile,
     solutions.
     """
     for order in orders:
+        print('order', order)
         e = beamdict[order]['DISPL']
+        print('e', ' DISPL', e)
         if len(e) == 3:
             e0, e1, e2 = e
             cpoly_0 = get_polynomial(e0)
@@ -222,7 +231,7 @@ def create_grism_config(conffile,
             displ.append((cpoly_0,))
 
         e = beamdict[order]['DISPX']
-
+        print('e', ' DISPX', e)
         if len(e) == 3:
             # final poly is ans = cpoly_0 + t*cpoly_1 + t**2 * cpoly_2
             e0, e1, e2 = e
@@ -237,6 +246,7 @@ def create_grism_config(conffile,
             dispx.append((cpoly_0,))
 
         e = beamdict[order]['DISPY']
+        print('e', ' DISPY', e)
         if len(e) == 3:
             e0, e1, e2 = e
             cpoly_0 = get_polynomial(e0)
